@@ -22,9 +22,9 @@ public:
     acct = loadAccount(keyfile_path, keyfile_pass);
   }
 
-  // Client should be able to use acct information, but we may want restrict
-  // writing to our copy
-  OlmAccount getAccount() { return *acct; }
+  // Client should be able to use acct information, but we may want to restrict
+  // writing to our copy in the future
+  OlmAccount *getAccount() { return acct; }
 
 public:
   // Public Variables
@@ -74,14 +74,15 @@ private:
   // Loads in an olm account from file, or creates one if no file exists.
   // Empty strings for the keyfile_path and keyfile_pass indicate that no data
   // should be persisted to disk.
-  std::unique_ptr<OlmAccount> loadAccount(std::string keyfile_path,
-                                          std::string keyfile_pass);
+  OlmAccount *loadAccount(std::string keyfile_path, std::string keyfile_pass);
 
 private:
   // Private Variables
 
   // Account used to interact with olm, and store keys.
-  std::unique_ptr<OlmAccount> acct;
+  // using a CPtr to combat lack of the required sizeof operator for unique and
+  // shared Ptrs
+  OlmAccount *acct;
   // Indicates whether or not, data is being persisted to disk
   bool persisting;
 };
