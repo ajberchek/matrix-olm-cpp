@@ -4,7 +4,7 @@
 OlmAccount *olmWrapper::loadAccount(std::string keyfile_path,
                                     std::string keyfile_pass) {
   if (keyfile_path == "" && keyfile_pass == "") {
-    void *memory = (int *)malloc(olm_account_size());
+    void *memory = malloc(olm_account_size());
     if (memory) {
       return olm_account(memory);
     } else {
@@ -12,7 +12,7 @@ OlmAccount *olmWrapper::loadAccount(std::string keyfile_path,
     }
   } else {
     // Stubbed functionality
-    void *memory = (int *)malloc(olm_account_size());
+    void *memory = malloc(olm_account_size());
     if (memory) {
       return olm_account(memory);
     } else {
