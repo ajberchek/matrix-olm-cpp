@@ -43,3 +43,7 @@ set(SRC src/MatrixOlmCpp.cpp)
 add_library(matrix_olm_wrapper ${SRC})
 add_dependencies(matrix_olm_wrapper Olm)
 target_link_libraries(matrix_olm_wrapper olm)
+
+include_directories(tests)
+add_executable(Test tests/test.cpp)
+target_link_libraries(Test matrix_olm_wrapper)
