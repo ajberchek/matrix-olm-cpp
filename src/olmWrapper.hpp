@@ -22,6 +22,33 @@ public:
     acct = loadAccount(keyfile_path, keyfile_pass);
   }
 
+  // The signAndEncrypt, decryptAndVerify, and verifyDevice functions should be
+  // called by the client when sending and receiving messages. Provided string
+  // data should be the string version of the json object related to the
+  // operation described unless otherwise specified. These functions take in
+  // function callbacks since they may call asynchronous functions themselves.
+  using wrapperError = std::experimental::optional<std::string>;
+
+  // Signs and encrypts the message passed in to the specified user, then passes
+  // the encrypted data in json format to the callback function, ready to send
+  void signAndEncrypt(
+      const std::string &to_user_id, const std::string &message,
+      std::function<void(const std::string &secured_message, wrapperError)>);
+
+  // Decrypts and verifies the signature of the received message, then passes
+  // the plaintext message to the callback. Upon a failed signature
+  // verification, the message and an error will be passed back to the callback.
+  // This way the client can choose what to do with the unverified message
+  void decryptAndVerify(
+      const std::string &secured_message,
+      std::function<void(const std::string &message, wrapperError)>);
+
+  // Adds a user_id+device_id to the list of verified devices
+  // to_verify is the canonically formatted user_id being added to the verified
+  // list device_id is the canonically formatted device_id begin added in
+  // conjunction with the user_id to the verified list
+  void verifyDevice(const std::string &toVerify, const std::string &device_id);
+
   // Client should be able to use acct information, but we may want to restrict
   // writing to our copy in the future
   OlmAccount *getAccount() { return acct; }
@@ -30,7 +57,7 @@ public:
   // Public Variables
 
   // The below functions need to be provided by the client in the described
-  // format before any homeserver interactions can take place Client provided
+  // format before any homeserver interactions can take place. Client provided
   // functions should take in strings of the json objects related to the
   // endpoint they are contacting unless otherwise specified
 
@@ -41,8 +68,8 @@ public:
       std::function<void(const std::string &upload_response, keyRequestErr)>)>
       uploadKeys;
   // Returns current device and id keys for the given user from
-  // /_matrix/client/r0/keys/query user_id is the user_id who's keys we are
-  // requesting
+  // /_matrix/client/r0/keys/query user_id is the canonical representation of
+  // the user_id who's keys we are requesting
   std::function<void(
       std::string &user_id,
       std::function<void(const std::string &key_response, keyRequestErr)>)>
