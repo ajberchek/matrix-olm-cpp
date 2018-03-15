@@ -6,16 +6,16 @@
 
 #include "olm/olm.h"
 
-class olmWrapper {
+class MatrixOlmCpp {
 public:
   // Public Functions
 
   // An empty keyfile_path and keyfile_pass indicates keys shouldn't be
   // persisted
-  olmWrapper(std::string device_id, std::string user_id)
-      : olmWrapper(device_id, user_id, "", "") {}
+  MatrixOlmCpp(std::string device_id, std::string user_id)
+      : MatrixOlmCpp(device_id, user_id, "", "") {}
 
-  olmWrapper(std::string device_id, std::string user_id,
+  MatrixOlmCpp(std::string device_id, std::string user_id,
              std::string keyfile_path, std::string keyfile_pass) {
     device_id_ = device_id;
     user_id_ = user_id;

@@ -38,7 +38,7 @@ endif()
 include(Olm)
 
 include_directories(src)
-set(SRC src/olmWrapper.cpp)
+set(SRC src/MatrixOlmCpp.cpp)
 
 add_library(matrix_olm_wrapper ${SRC})
 add_dependencies(matrix_olm_wrapper Olm)

@@ -1,7 +1,7 @@
-#include "olmWrapper.hpp"
+#include "MatrixOlmCpp.hpp"
 #include <stdlib.h>
 
-OlmAccount *olmWrapper::loadAccount(std::string keyfile_path,
+OlmAccount *MatrixOlmCpp::loadAccount(std::string keyfile_path,
                                     std::string keyfile_pass) {
   if (keyfile_path == "" && keyfile_pass == "") {
     void *memory = malloc(olm_account_size());
