@@ -1,4 +1,4 @@
-FILES=`find src -type f -type f \( -iname "*.cpp" -o -iname "*.hpp" \)`
+FILES=`find src tests -type f -type f \( -iname "*.cpp" -o -iname "*.hpp" \)`
 
 default:
 	@cmake . -Bbuild
