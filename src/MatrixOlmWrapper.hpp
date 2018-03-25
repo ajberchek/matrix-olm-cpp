@@ -2,6 +2,7 @@
 
 #include <experimental/optional>
 #include <functional>
+#include <iostream>
 #include <memory>
 
 #include "olm/olm.h"
@@ -16,10 +17,16 @@ public:
       : MatrixOlmWrapper(device_id, user_id, "", "") {}
 
   MatrixOlmWrapper(std::string device_id, std::string user_id,
-             std::string keyfile_path, std::string keyfile_pass) {
+                   std::string keyfile_path, std::string keyfile_pass) {
     device_id_ = device_id;
     user_id_ = user_id;
     acct = loadAccount(keyfile_path, keyfile_pass);
+  }
+
+  ~MatrixOlmWrapper() {
+    if (acct != nullptr) {
+      free(acct);
+    }
   }
 
   // The signAndEncrypt, decryptAndVerify, and verifyDevice functions should be
