@@ -50,11 +50,14 @@ public:
       const std::string &secured_message,
       std::function<void(const std::string &message, wrapperError)>);
 
-  // Adds a user_id+device_id to the list of verified devices
+  // Adds a user_id+pair<device_id,pub_key> to the list of verified devices
   // to_verify is the canonically formatted user_id being added to the verified
-  // list device_id is the canonically formatted device_id begin added in
-  // conjunction with the user_id to the verified list
-  void verifyDevice(const std::string &toVerify, const std::string &device_id);
+  // list. device_and_key contain a is the canonically formatted device_id and
+  // formatted public key corresponding to that user and device ID you would
+  // like to verify. This pair is to be added in conjunction with the user_id to
+  // the verified list
+  void verifyDevice(const std::string &toVerify,
+                    const std::pair<std::string, std::string> device_and_key);
 
   // Client should be able to use acct information, but we may want to restrict
   // writing to our copy in the future
@@ -102,6 +105,9 @@ public:
   // to
   std::string user_id_;
 
+  // Identity keys used to identify the device and verify its signatures
+  std::string identity_keys_;
+
 private:
   // Private Functions
 
@@ -117,6 +123,18 @@ private:
   // using a CPtr to combat lack of the required sizeof operator for unique and
   // shared Ptrs
   OlmAccount *acct;
+
+  // Keeps track of verified devices
+  // hashmap(user_id -> hashmap(device_id -> Base64_fingerprint_key))
+  std::unordered_map<std::string, std::unordered_map<std::string, std::string>>
+      verified;
+
+  // Keeps track of open sessions
+  // hashmap(identity_key -> Session)
+  std::unordered_map<std::string, OlmSession *> sessions;
+
   // Indicates whether or not, data is being persisted to disk
   bool persisting;
+  // Indicating whether or not identity_keys_ has been published
+  bool id_published;
 };
