@@ -8,5 +8,8 @@ lint:
 	@bash .make/clangFormatDiff.sh ${FILES} || true
 	@clang-format -i ${FILES}
 
+test:
+	@./build/test_interface
+
 clean:
 	rm -rf build

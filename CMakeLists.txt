@@ -38,8 +38,11 @@ endif()
 include(Olm)
 
 include_directories(src)
-set(SRC src/olmWrapper.cpp)
+set(SRC src/MatrixOlmWrapper.cpp)
 
 add_library(matrix_olm_wrapper ${SRC})
 add_dependencies(matrix_olm_wrapper Olm)
 target_link_libraries(matrix_olm_wrapper olm)
+
+add_executable(test_interface tests/test.cpp)
+target_link_libraries(test_interface matrix_olm_wrapper)
