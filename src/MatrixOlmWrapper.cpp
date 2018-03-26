@@ -12,7 +12,7 @@ void *getRandData(int buffer_size) {
     return nullptr;
   }
 
-  // TODO: add other options to generate random data for different OSs
+    // TODO: add other options to generate random data for different OSs
 #ifdef __linux__
   int fd;
   if ((fd = open("/dev/random", O_RDONLY)) != -1) {

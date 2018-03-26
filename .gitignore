@@ -29,6 +29,7 @@
 
 # Build artifacts
 build/
+deps/
 
 # Editor
 .vscode/

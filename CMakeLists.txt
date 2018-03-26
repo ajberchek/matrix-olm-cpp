@@ -37,6 +37,11 @@ endif()
 #
 include(Olm)
 
+file(DOWNLOAD "https://github.com/nlohmann/json/releases/download/v3.1.2/json.hpp" 
+	${PROJECT_SOURCE_DIR}/deps/json.hpp 
+	EXPECTED_HASH SHA256=fbdfec4b4cf63b3b565d09f87e6c3c183bdd45c5be1864d3fcb338f6f02c1733)
+
+include_directories(deps)
 include_directories(src)
 set(SRC src/MatrixOlmWrapper.cpp)
 
