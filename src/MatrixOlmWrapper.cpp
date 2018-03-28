@@ -1,10 +1,16 @@
 #include "MatrixOlmWrapper.hpp"
-#include <stdlib.h>
+#include <json.hpp>
 
+#include <chrono>
+#include <thread>
+
+#include <stdlib.h>
 #ifdef __linux__
 #include <fcntl.h>
 #include <unistd.h>
 #endif
+
+using json = nlohmann::json;
 
 void *getRandData(int buffer_size) {
   void *buffer = malloc(buffer_size);
@@ -27,6 +33,46 @@ void *getRandData(int buffer_size) {
 #endif
 }
 
+void MatrixOlmWrapper::setupIdentityKeys() {
+  if (!id_published) {
+    if (identity_keys_.empty()) {
+      int id_buff_size = olm_account_identity_keys_length(acct);
+      void *id_buff = malloc(id_buff_size);
+      if (id_buff && olm_error() != olm_account_identity_keys(acct, id_buff,
+                                                              id_buff_size)) {
+        identity_keys_ = std::string(static_cast<char *>(id_buff));
+      }
+      free(id_buff);
+    }
+
+    // Form json and publish keys
+    if (!identity_keys_.empty() && uploadKeys != nullptr) {
+      json id = json::parse(identity_keys_);
+      json keyData = {
+          {"algorithms",
+           {"m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"}},
+          {"keys",
+           {{"curve25519:" + device_id_, id["curve25519"]},
+            {"ed25519:" + device_id_, id["ed25519"]}}},
+          {"device_id:", device_id_},
+          {"user_id", user_id_}};
+
+      std::string keyString = keyData.dump();
+      uploadKeys(keyString,
+                 [this](const std::string &,
+                        std::experimental::optional<std::string> err) {
+                   if (!err) {
+                     id_published = true;
+                   }
+                 });
+    }
+  }
+}
+
+void MatrixOlmWrapper::replenishKeyJob() {
+  std::cout << "Replenishing one-time keys" << std::endl;
+}
+
 OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
                                           std::string keyfile_pass) {
   OlmAccount *acct;
@@ -40,17 +86,22 @@ OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
       random_size = olm_create_account_random_length(acct);
       if ((random = getRandData(random_size)) != nullptr &&
           olm_error() != olm_create_account(acct, random, random_size)) {
-        // Set up identity keys for this account
-        int id_buff_size = olm_account_identity_keys_length(acct);
-        void *id_buff = malloc(id_buff_size);
-        if (id_buff && olm_error() != olm_account_identity_keys(acct, id_buff,
-                                                                id_buff_size)) {
-          identity_keys_ = std::string(static_cast<char *>(id_buff));
-        }
+
+        std::thread([this]() {
+          while (true) {
+            setupIdentityKeys();
+            if (id_published) {
+              replenishKeyJob();
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+          }
+        })
+            .detach();
+
         free(random);
-        free(id_buff);
         return acct;
       }
+
       free(memory);
       free(random);
       return nullptr;

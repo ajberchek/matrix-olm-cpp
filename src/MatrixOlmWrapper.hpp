@@ -63,6 +63,9 @@ public:
   // writing to our copy in the future
   OlmAccount *getAccount() { return acct; }
 
+  void setupIdentityKeys();
+  void replenishKeyJob();
+
 public:
   // Public Variables
 

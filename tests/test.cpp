@@ -16,6 +16,9 @@ void uploadKeys(
                        std::experimental::optional<std::string> err)>
         callback) {
 
+  std::cout << "Upload Keys is uploading: "
+            << nlohmann::json::parse(key_upload).dump(2) << std::endl;
+
   nlohmann::json dat = nlohmann::json::parse(key_upload)["one_time_keys"];
 
   for (auto it = dat.begin(); it != dat.end(); ++it) {
@@ -37,6 +40,7 @@ int main() {
   MatrixOlmWrapper m("", "");
   m.uploadKeys = uploadKeys;
 
+  /*
   std::string arg =
       "{\"device_keys\": {\"user_id\": \"@alice:example.com\",\"device_id\": "
       "\"JLAFKJWSCS\",\"algorithms\": "
@@ -61,4 +65,7 @@ int main() {
                        std::experimental::optional<std::string>) {
     std::cout << "Current key count for this device: " << res << std::endl;
   });
+  */
+  while (true)
+    ;
 }
