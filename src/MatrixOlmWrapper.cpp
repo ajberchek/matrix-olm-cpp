@@ -32,13 +32,12 @@ OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
   OlmAccount *acct;
   if (keyfile_path == "" && keyfile_pass == "") {
     void *memory = malloc(olm_account_size());
-
     if (memory) {
-      acct = olm_account(memory);
-
       void *random;
-      int random_size = olm_create_account_random_length(acct);
+      int random_size;
 
+      acct = olm_account(memory);
+      random_size = olm_create_account_random_length(acct);
       if ((random = getRandData(random_size)) != nullptr &&
           olm_error() != olm_create_account(acct, random, random_size)) {
         // Set up identity keys for this account
@@ -48,14 +47,13 @@ OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
                                                                 id_buff_size)) {
           identity_keys_ = std::string(static_cast<char *>(id_buff));
         }
-
+        free(random);
+        free(id_buff);
         return acct;
       }
-
       free(memory);
       free(random);
       return nullptr;
-
     } else {
       return nullptr;
     }
