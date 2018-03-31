@@ -3,9 +3,6 @@
 ## Description
 This repo provides a C++ wrapper for the library, [libolm](https://git.matrix.org/git/olm/), used in Matrix's end-to-end encryption.
 
-## Description
-This repo provides a C++ wrapper for the library, [libolm](https://git.matrix.org/git/olm/), used in Matrix's end-to-end encryption.
-
 ## Build Instructions
 
 **Dependencies**
