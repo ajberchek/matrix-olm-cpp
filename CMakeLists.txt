@@ -37,12 +37,23 @@ endif()
 #
 include(Olm)
 
+#
+# libsodium
+#
+include(Findsodium)
+
+file(DOWNLOAD "https://github.com/nlohmann/json/releases/download/v3.1.2/json.hpp" 
+	${PROJECT_SOURCE_DIR}/deps/json.hpp 
+	EXPECTED_HASH SHA256=fbdfec4b4cf63b3b565d09f87e6c3c183bdd45c5be1864d3fcb338f6f02c1733)
+
+include_directories(deps)
 include_directories(src)
+include_directories(SYSTEM sodium_INCLUDE_DIR)
 set(SRC src/MatrixOlmWrapper.cpp)
 
 add_library(matrix_olm_wrapper ${SRC})
 add_dependencies(matrix_olm_wrapper Olm)
-target_link_libraries(matrix_olm_wrapper olm)
+target_link_libraries(matrix_olm_wrapper olm ${sodium_LIBRARY_RELEASE})
 
 add_executable(test_interface tests/test.cpp)
 target_link_libraries(test_interface matrix_olm_wrapper)
