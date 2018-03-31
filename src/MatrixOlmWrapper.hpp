@@ -6,6 +6,8 @@
 #include <memory>
 
 #include "olm/olm.h"
+#include <json.hpp>
+using json = nlohmann::json;
 
 class MatrixOlmWrapper {
 public:
@@ -63,9 +65,6 @@ public:
   // writing to our copy in the future
   OlmAccount *getAccount() { return acct; }
 
-  void setupIdentityKeys();
-  void replenishKeyJob();
-
 public:
   // Public Variables
 
@@ -118,6 +117,11 @@ private:
   // Empty strings for the keyfile_path and keyfile_pass indicate that no data
   // should be persisted to disk.
   OlmAccount *loadAccount(std::string keyfile_path, std::string keyfile_pass);
+
+  json signKey(json &key);
+  int genSignedKeys(json &data, int num_keys);
+  void setupIdentityKeys();
+  void replenishKeyJob();
 
 private:
   // Private Variables

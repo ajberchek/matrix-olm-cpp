@@ -16,7 +16,7 @@ void uploadKeys(
                        std::experimental::optional<std::string> err)>
         callback) {
 
-  std::cout << "Upload Keys is uploading: "
+  std::cout << "Upload Keys is uploading: " << std::endl
             << nlohmann::json::parse(key_upload).dump(2) << std::endl;
 
   nlohmann::json dat = nlohmann::json::parse(key_upload)["one_time_keys"];
@@ -29,7 +29,7 @@ void uploadKeys(
 
   nlohmann::json response;
   for (auto &elem : key_counts) {
-    response["one_time_keys"][elem.first] = elem.second;
+    response["one_time_key_counts"][elem.first] = elem.second;
   }
 
   callback(response.dump(), std::experimental::optional<std::string>());
@@ -37,7 +37,7 @@ void uploadKeys(
 
 int main() {
   // Simple sanity check to verify function linking works
-  MatrixOlmWrapper m("", "");
+  MatrixOlmWrapper m("HeartOfGold", "Zaphod");
   m.uploadKeys = uploadKeys;
 
   /*
