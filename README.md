@@ -11,6 +11,7 @@ This repo provides a C++ wrapper for the library, [libolm](https://git.matrix.or
 - CMake 3.1 or greater
 - C++ 11 compiler
 - Clang format 3.5
+- [Libsodium](https://download.libsodium.org/doc/)
 - Libolm (Automatically downloaded and integrated during build)
 
 **Building**

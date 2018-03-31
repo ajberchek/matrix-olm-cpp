@@ -4,32 +4,14 @@
 #include <memory>
 #include <thread>
 
+#include <sodium.h>
 #include <stdlib.h>
-#ifdef __linux__
-#include <fcntl.h>
-#include <unistd.h>
-#endif
 
 // buffer_size is the size of the buffer in number of bytes
 std::unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
   std::unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
-
-  // TODO: add other options to generate random data for different OSs
-#ifdef __linux__
-  int fd;
-  if ((fd = open("/dev/random", O_RDONLY)) != -1) {
-    unsigned int bytes_read = 0;
-    while (bytes_read < buffer_size) {
-      bytes_read +=
-          read(fd, &(buffer.get()[bytes_read]), buffer_size - bytes_read);
-    }
-    close(fd);
-    return buffer;
-  } else {
-    std::cout << "Failed to open /dev/random" << std::endl;
-    return nullptr;
-  }
-#endif
+  randombytes_buf(buffer.get(), buffer_size);
+  return buffer;
 }
 
 void MatrixOlmWrapper::setupIdentityKeys() {
@@ -144,26 +126,26 @@ void MatrixOlmWrapper::replenishKeyJob() {
     int keys_needed =
         static_cast<int>(olm_account_max_number_of_one_time_keys(acct)) -
         current_key_count;
-    // Used until new random number generation is in place since /dev/random
-    // takes a long time to generate random data
-    keys_needed = 2;
 
-    json data;
-    if (genSignedKeys(data, keys_needed) > 0 && uploadKeys != nullptr) {
-      std::string data_string = data.dump(2);
-      uploadKeys(
-          data_string, [this, current_key_count](
-                           const std::string &resp,
-                           std::experimental::optional<std::string> err) {
-            if (!err) {
-              std::cout << "publishing one time keys returned " << resp
-                        << std::endl;
-              if (json::parse(resp)["one_time_key_counts"]["signed_curve25519"]
-                      .get<int>() > current_key_count) {
-                olm_account_mark_keys_as_published(acct);
+    if (keys_needed) {
+      json data;
+      if (genSignedKeys(data, keys_needed) > 0 && uploadKeys != nullptr) {
+        std::string data_string = data.dump(2);
+        uploadKeys(
+            data_string, [this, current_key_count](
+                             const std::string &resp,
+                             std::experimental::optional<std::string> err) {
+              if (!err) {
+                std::cout << "publishing one time keys returned: " << resp
+                          << std::endl;
+                if (json::parse(
+                        resp)["one_time_key_counts"]["signed_curve25519"]
+                        .get<int>() > current_key_count) {
+                  olm_account_mark_keys_as_published(acct);
+                }
               }
-            }
-          });
+            });
+      }
     }
   });
 }
@@ -187,7 +169,7 @@ OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
           if (id_published) {
             replenishKeyJob();
           }
-          std::this_thread::sleep_for(std::chrono::minutes(1));
+          std::this_thread::sleep_for(std::chrono::minutes(10));
         }
       })
           .detach();
