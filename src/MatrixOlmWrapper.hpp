@@ -5,7 +5,9 @@
 #include <iostream>
 #include <memory>
 
-#include "olm/olm.h"
+#include "olm/account.hh"
+#include "olm/session.hh"
+
 #include <json.hpp>
 using json = nlohmann::json;
 
@@ -23,12 +25,6 @@ public:
     device_id_ = device_id;
     user_id_ = user_id;
     acct = loadAccount(keyfile_path, keyfile_pass);
-  }
-
-  ~MatrixOlmWrapper() {
-    if (acct != nullptr) {
-      free(acct);
-    }
   }
 
   // The signAndEncrypt, decryptAndVerify, and verifyDevice functions should be
@@ -60,10 +56,6 @@ public:
   // the verified list
   void verifyDevice(const std::string &toVerify,
                     const std::pair<std::string, std::string> device_and_key);
-
-  // Client should be able to use acct information, but we may want to restrict
-  // writing to our copy in the future
-  OlmAccount *getAccount() { return acct; }
 
 public:
   // Public Variables
@@ -116,7 +108,8 @@ private:
   // Loads in an olm account from file, or creates one if no file exists.
   // Empty strings for the keyfile_path and keyfile_pass indicate that no data
   // should be persisted to disk.
-  OlmAccount *loadAccount(std::string keyfile_path, std::string keyfile_pass);
+  std::unique_ptr<olm::Account> loadAccount(std::string keyfile_path,
+                                            std::string keyfile_pass);
 
   json signKey(json &key);
   int genSignedKeys(json &data, int num_keys);
@@ -127,9 +120,7 @@ private:
   // Private Variables
 
   // Account used to interact with olm, and store keys.
-  // using a CPtr to combat lack of the required sizeof operator for unique and
-  // shared Ptrs
-  OlmAccount *acct;
+  std::unique_ptr<olm::Account> acct;
 
   // Keeps track of verified devices
   // hashmap(user_id -> hashmap(device_id -> Base64_fingerprint_key))
@@ -138,7 +129,7 @@ private:
 
   // Keeps track of open sessions
   // hashmap(identity_key -> Session)
-  std::unordered_map<std::string, OlmSession *> sessions;
+  std::unordered_map<std::string, std::unique_ptr<olm::Session>> sessions;
 
   // Indicates whether or not, data is being persisted to disk
   bool persisting;

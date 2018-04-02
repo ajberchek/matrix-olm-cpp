@@ -4,6 +4,8 @@
 #include <memory>
 #include <thread>
 
+#include "olm/base64.hh"
+
 #include <sodium.h>
 #include <stdlib.h>
 
@@ -17,12 +19,15 @@ std::unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
 void MatrixOlmWrapper::setupIdentityKeys() {
   if (!id_published) {
     if (identity_keys_.empty()) {
-      int id_buff_size = olm_account_identity_keys_length(acct);
+      int id_buff_size = acct->get_identity_json_length();
       std::unique_ptr<uint8_t[]> id_buff(new uint8_t[id_buff_size]);
-      if (olm_error() !=
-          olm_account_identity_keys(acct, id_buff.get(), id_buff_size)) {
+      if (std::size_t(-1) !=
+          acct->get_identity_json(id_buff.get(), id_buff_size)) {
         identity_keys_ =
             std::string(reinterpret_cast<const char *>(id_buff.get()));
+      } else {
+        // Throw exception, couldnt get the identity keys
+        return;
       }
     }
 
@@ -54,45 +59,48 @@ void MatrixOlmWrapper::setupIdentityKeys() {
 // "<curve25519_key>"}
 json MatrixOlmWrapper::signKey(json &key) {
   int sig_length, message_length;
-  void const *message;
+  const uint8_t *message;
   json to_sign, signed_key;
 
   to_sign["key"] = key.begin().value();
-  signed_key = json::parse("{}");
-
   std::string m = to_sign.dump(2);
   message_length = m.size();
-  message = static_cast<void const *>(m.c_str());
-  sig_length = olm_account_signature_length(acct);
+  message = reinterpret_cast<const uint8_t *>(m.c_str());
+  sig_length = acct->signature_length();
   std::unique_ptr<uint8_t[]> sig(new uint8_t[sig_length]);
 
-  if (olm_error() !=
-      olm_account_sign(acct, message, message_length, sig.get(), sig_length)) {
-    std::string signature =
-        std::string(reinterpret_cast<const char *>(sig.get()));
+  if (std::size_t(-1) !=
+      acct->sign(message, message_length, sig.get(), sig_length)) {
+    std::unique_ptr<uint8_t[]> sig_base64(
+        new uint8_t[olm::encode_base64_length(sig_length)]);
+    olm::encode_base64(sig.get(), sig_length, sig_base64.get());
+    std::string signature(reinterpret_cast<const char *>(sig_base64.get()));
+
     signed_key = {{"signed_curve25519:" + key.begin().key(),
                    {{to_sign.begin().key(), to_sign.begin().value()},
                     {"signatures",
                      {{user_id_, {{"ed25519:" + device_id_, signature}}}}}}}};
+    return signed_key;
+  } else {
+    // Couldnt sign properly, throw error
+    return json::parse("{}");
   }
-  return signed_key;
 }
 
 // Returns the number of keys which were generated and signed
 // Upon successful return, data will contain the signed keys
 int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
-  int generated_keys = 0;
-  int rand_length =
-      olm_account_generate_one_time_keys_random_length(acct, num_keys);
+  int rand_length = acct->generate_one_time_keys_random_length(num_keys);
   std::unique_ptr<uint8_t[]> rand_data = getRandData(rand_length);
   data = json::parse("{}");
 
-  if (olm_error() != olm_account_generate_one_time_keys(
-                         acct, num_keys, rand_data.get(), rand_length)) {
-    int keys_size = olm_account_one_time_keys_length(acct);
+  if (std::size_t(-1) !=
+      acct->generate_one_time_keys(num_keys, rand_data.get(), rand_length)) {
+    int keys_size = acct->get_one_time_keys_json_length();
     std::unique_ptr<uint8_t[]> keys(new uint8_t[keys_size]);
 
-    if (olm_error() != olm_account_one_time_keys(acct, keys.get(), keys_size)) {
+    if (std::size_t(-1) !=
+        acct->get_one_time_keys_json(keys.get(), keys_size)) {
       json one_time_keys =
           json::parse(std::string(reinterpret_cast<const char *>(keys.get())));
       for (auto it = one_time_keys["curve25519"].begin();
@@ -103,10 +111,15 @@ int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
         data["one_time_keys"][signed_key.begin().key()] =
             signed_key.begin().value();
       }
-      generated_keys = num_keys;
+      return num_keys;
+    } else {
+      // Throw exception, couldnt retrieve one time keys
+      return 0;
     }
+  } else {
+    // Throw exception, couldnt generate one time keys
+    return 0;
   }
-  return generated_keys;
 }
 
 // TODO add synchronization
@@ -123,9 +136,8 @@ void MatrixOlmWrapper::replenishKeyJob() {
               .get<int>();
     }
 
-    int keys_needed =
-        static_cast<int>(olm_account_max_number_of_one_time_keys(acct)) -
-        current_key_count;
+    int keys_needed = static_cast<int>(acct->max_number_of_one_time_keys()) -
+                      current_key_count;
 
     if (keys_needed) {
       json data;
@@ -141,7 +153,7 @@ void MatrixOlmWrapper::replenishKeyJob() {
                 if (json::parse(
                         resp)["one_time_key_counts"]["signed_curve25519"]
                         .get<int>() > current_key_count) {
-                  olm_account_mark_keys_as_published(acct);
+                  acct->mark_keys_as_published();
                 }
               }
             });
@@ -150,19 +162,15 @@ void MatrixOlmWrapper::replenishKeyJob() {
   });
 }
 
-OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
-                                          std::string keyfile_pass) {
-  OlmAccount *acct;
+std::unique_ptr<olm::Account>
+MatrixOlmWrapper::loadAccount(std::string keyfile_path,
+                              std::string keyfile_pass) {
+  std::unique_ptr<olm::Account> acct = std::make_unique<olm::Account>();
   if (keyfile_path == "" && keyfile_pass == "") {
-    std::unique_ptr<uint8_t[]> memory(new uint8_t[olm_account_size()]);
-    std::unique_ptr<uint8_t[]> random;
-    int random_size;
+    int random_size = acct->new_account_random_length();
+    std::unique_ptr<uint8_t[]> random = getRandData(random_size);
 
-    acct = olm_account(memory.get());
-    random_size = olm_create_account_random_length(acct);
-    random = getRandData(random_size);
-    if (olm_error() != olm_create_account(acct, random.get(), random_size)) {
-
+    if (std::size_t(-1) != acct->new_account(random.get(), random_size)) {
       std::thread([this]() {
         while (true) {
           setupIdentityKeys();
@@ -175,9 +183,10 @@ OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
           .detach();
 
       return acct;
+    } else {
+      // Error occurred, throw exception
+      return nullptr;
     }
-
-    return nullptr;
   } else {
     // Stubbed functionality
     return nullptr;
