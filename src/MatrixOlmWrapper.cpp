@@ -3,181 +3,332 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <string>
+
+#include "olm/base64.hh"
+#include "olm/utility.hh"
 
 #include <sodium.h>
 #include <stdlib.h>
 
+////////////////////////////////////////////////////////////
+//                    Helper Functions                    //
+////////////////////////////////////////////////////////////
 // buffer_size is the size of the buffer in number of bytes
-std::unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
-  std::unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
+unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
+  unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
   randombytes_buf(buffer.get(), buffer_size);
   return buffer;
 }
 
+// Encodes the json object to a properly formatted string (According to
+// https://matrix.org/speculator/spec/HEAD/appendices.html#signing-json)
+void toSignable(json data, string &encoded) {
+  // Remove data which shouldnt be signed
+  data.erase("signatures");
+  data.erase("unsigned");
+
+  // Keys encoded in alphabetical order with no whitespace
+  encoded = data.dump();
+}
+
+// Generate a base64 encoded signature
+string signData(const string &message, shared_ptr<olm::Account> acct) {
+  int m_len = message.size();
+  const uint8_t *m = reinterpret_cast<const uint8_t *>(message.c_str());
+  int sig_len = acct->signature_length();
+
+  unique_ptr<uint8_t[]> sig(new uint8_t[sig_len]);
+  unique_ptr<uint8_t[]> sig_base64(
+      new uint8_t[olm::encode_base64_length(sig_len)]);
+
+  if (size_t(-1) != acct->sign(m, m_len, sig.get(), sig_len)) {
+    olm::encode_base64(sig.get(), sig_len, sig_base64.get());
+    return string(reinterpret_cast<const char *>(sig_base64.get()));
+  }
+  return string();
+}
+string signData(const json &message, shared_ptr<olm::Account> acct) {
+  string m;
+  toSignable(message, m);
+  return signData(m, acct);
+}
+
+// Verify a signature
+bool verify(string &message, string &sig, _olm_ed25519_public_key &key) {
+  const uint8_t *m = reinterpret_cast<const uint8_t *>(message.c_str());
+
+  int sig_dec_len = olm::decode_base64_length(sig.size());
+  const uint8_t *s = reinterpret_cast<const uint8_t *>(sig.c_str());
+  unique_ptr<uint8_t[]> sig_dec(new uint8_t[sig_dec_len]);
+  olm::decode_base64(s, sig.size(), sig_dec.get());
+
+  return size_t(0) == olm::Utility().ed25519_verify(key, m, message.size(),
+                                                    sig_dec.get(), sig_dec_len);
+}
+bool verify(string &message, string &sig, string &key) {
+  // Decode key to char array
+  int key_dec_len = olm::decode_base64_length(key.size());
+  if (key_dec_len == ED25519_PUBLIC_KEY_LENGTH) {
+    struct _olm_ed25519_public_key pub_key;
+    const uint8_t *k = reinterpret_cast<const uint8_t *>(key.c_str());
+    olm::decode_base64(k, key.size(), pub_key.public_key);
+    return verify(message, sig, pub_key);
+  }
+  return false;
+}
+bool verify(json &message, string &key) {
+  // sig = signatures.user_id.key
+  string sig = message["signatures"].begin().value().begin().value();
+  string m_formatted;
+  toSignable(message, m_formatted);
+  return verify(m_formatted, sig, key);
+}
+bool verify(json &message,
+            unordered_map<string, unordered_map<string, string>> &verified) {
+  try {
+    string user = message["signatures"].begin().key();
+    string algo_device = message["signatures"].begin().value().begin().key();
+    if(algo_device.find(':') == string::npos) {
+      return false;
+    }
+
+    string device =
+        algo_device.substr(algo_device.find(':')+1, algo_device.size());
+    string key = verified[user][device];
+    if (key.empty()) {
+      cout << "User device combo isnt verified" << endl;
+      return false;
+    }
+
+    return verify(message, key);
+  } catch (exception &e) {
+    cout << "Encountered an issue during verification: " << endl
+         << e.what() << endl;
+    return false;
+  }
+}
+
+////////////////////////////////////////////////////////////
+//                   Member Functions                     //
+////////////////////////////////////////////////////////////
 void MatrixOlmWrapper::setupIdentityKeys() {
   if (!id_published) {
     if (identity_keys_.empty()) {
-      int id_buff_size = olm_account_identity_keys_length(acct);
-      std::unique_ptr<uint8_t[]> id_buff(new uint8_t[id_buff_size]);
-      if (olm_error() !=
-          olm_account_identity_keys(acct, id_buff.get(), id_buff_size)) {
-        identity_keys_ =
-            std::string(reinterpret_cast<const char *>(id_buff.get()));
+      int id_buff_size = acct->get_identity_json_length();
+      unique_ptr<uint8_t[]> id_buff(new uint8_t[id_buff_size]);
+      if (size_t(-1) != acct->get_identity_json(id_buff.get(), id_buff_size)) {
+        identity_keys_ = string(reinterpret_cast<const char *>(id_buff.get()));
+      } else {
+        // Couldnt get the identity keys
+        return;
       }
     }
 
     // Form json and publish keys
     if (!identity_keys_.empty() && uploadKeys != nullptr) {
-      json id = json::parse(identity_keys_);
-      json keyData = {
-          {"algorithms",
-           {"m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"}},
-          {"keys",
-           {{"curve25519:" + device_id_, id["curve25519"]},
-            {"ed25519:" + device_id_, id["ed25519"]}}},
-          {"device_id:", device_id_},
-          {"user_id", user_id_}};
+      try {
+        json id = json::parse(identity_keys_);
+        json key_data = {
+            {"algorithms",
+             {"m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"}},
+            {"keys",
+             {{"curve25519:" + device_id_, id["curve25519"]},
+              {"ed25519:" + device_id_, id["ed25519"]}}},
+            {"device_id:", device_id_},
+            {"user_id", user_id_}};
 
-      std::string keyString = keyData.dump();
-      uploadKeys(keyString,
-                 [this](const std::string &,
-                        std::experimental::optional<std::string> err) {
-                   if (!err) {
-                     id_published = true;
-                   }
-                 });
-    }
-  }
-}
+        // Sign keyData
+        string sig = signData(key_data, acct);
+        key_data["signatures"][user_id_]["ed25519:" + device_id_] = sig;
 
-// key should contain one key formatted as follows {"<key_id>":
-// "<curve25519_key>"}
-json MatrixOlmWrapper::signKey(json &key) {
-  int sig_length, message_length;
-  void const *message;
-  json to_sign, signed_key;
+        // Upload keys
+        string key_string = key_data.dump();
+        uploadKeys(key_string,
+                   [id,this](const string &, experimental::optional<string> err) {
+                     if (!err) {
+                       id_published = true;
 
-  to_sign["key"] = key.begin().value();
-  signed_key = json::parse("{}");
-
-  std::string m = to_sign.dump(2);
-  message_length = m.size();
-  message = static_cast<void const *>(m.c_str());
-  sig_length = olm_account_signature_length(acct);
-  std::unique_ptr<uint8_t[]> sig(new uint8_t[sig_length]);
-
-  if (olm_error() !=
-      olm_account_sign(acct, message, message_length, sig.get(), sig_length)) {
-    std::string signature =
-        std::string(reinterpret_cast<const char *>(sig.get()));
-    signed_key = {{"signed_curve25519:" + key.begin().key(),
-                   {{to_sign.begin().key(), to_sign.begin().value()},
-                    {"signatures",
-                     {{user_id_, {{"ed25519:" + device_id_, signature}}}}}}}};
-  }
-  return signed_key;
-}
-
-// Returns the number of keys which were generated and signed
-// Upon successful return, data will contain the signed keys
-int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
-  int generated_keys = 0;
-  int rand_length =
-      olm_account_generate_one_time_keys_random_length(acct, num_keys);
-  std::unique_ptr<uint8_t[]> rand_data = getRandData(rand_length);
-  data = json::parse("{}");
-
-  if (olm_error() != olm_account_generate_one_time_keys(
-                         acct, num_keys, rand_data.get(), rand_length)) {
-    int keys_size = olm_account_one_time_keys_length(acct);
-    std::unique_ptr<uint8_t[]> keys(new uint8_t[keys_size]);
-
-    if (olm_error() != olm_account_one_time_keys(acct, keys.get(), keys_size)) {
-      json one_time_keys =
-          json::parse(std::string(reinterpret_cast<const char *>(keys.get())));
-      for (auto it = one_time_keys["curve25519"].begin();
-           it != one_time_keys["curve25519"].end(); ++it) {
-        json key;
-        key[it.key()] = it.value();
-        json signed_key = signKey(key);
-        data["one_time_keys"][signed_key.begin().key()] =
-            signed_key.begin().value();
+                       // Add our keys to our list of verified devices
+                       verified[user_id_][device_id_] = id["ed25519"].get<string>();
+                     }
+                   });
+      } catch (const json::exception &e) {
+        cout << "Encountered an issue during json "
+                "serialization/deserialization: "
+             << endl
+             << e.what() << endl;
+        return;
+      } catch (const exception &e) {
+        cout << "Encountered an issue during identity key setup: " << endl
+             << e.what() << endl;
+        return;
       }
-      generated_keys = num_keys;
     }
   }
-  return generated_keys;
+}
+
+/*
+ * key should contain one key formatted as follows {"<key_id>":
+ * "<curve25519_key>"}
+ * Upon error, nullptr is returned
+ */
+json MatrixOlmWrapper::signKey(json &key) {
+  json to_sign, signed_key;
+  try {
+    to_sign["key"] = key.begin().value();
+    string signature = signData(to_sign, acct);
+    if (!signature.empty()) {
+      signed_key = {{"signed_curve25519:" + key.begin().key(),
+                     {{to_sign.begin().key(), to_sign.begin().value()},
+                      {"signatures",
+                       {{user_id_, {{"ed25519:" + device_id_, signature}}}}}}}};
+      return signed_key;
+    } else {
+      // Couldnt sign properly, return nullptr to signify this
+      return nullptr;
+    }
+  } catch (const json::exception &e) {
+    cout << "Encountered an issue during json serialization/deserialization: "
+         << endl
+         << e.what() << endl;
+    return nullptr;
+  } catch (const exception &e) {
+    cout << "Encountered an issue during key signing: " << endl
+         << e.what() << endl;
+    return nullptr;
+  }
+}
+
+/*
+ * Returns the number of keys which were generated and signed
+ * Upon successful return, data will contain the signed keys and num_keys will
+ * be returned Upon error, data will be restored to its original state, and 0
+ * will be returned
+ */
+int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
+  int rand_length = acct->generate_one_time_keys_random_length(num_keys);
+  unique_ptr<uint8_t[]> rand_data = getRandData(rand_length);
+  json original_data = data;
+  try {
+
+    if (size_t(-1) !=
+        acct->generate_one_time_keys(num_keys, rand_data.get(), rand_length)) {
+      int keys_size = acct->get_one_time_keys_json_length();
+      unique_ptr<uint8_t[]> keys(new uint8_t[keys_size]);
+      if (size_t(-1) != acct->get_one_time_keys_json(keys.get(), keys_size)) {
+        json one_time_keys =
+            json::parse(string(reinterpret_cast<const char *>(keys.get())));
+        json signed_key;
+
+        for (auto it = one_time_keys["curve25519"].begin();
+             it != one_time_keys["curve25519"].end(); ++it) {
+          json key;
+          key[it.key()] = it.value();
+          if ((signed_key = signKey(key)) == nullptr) {
+            data = original_data;
+            return 0;
+          }
+          data["one_time_keys"][signed_key.begin().key()] =
+              signed_key.begin().value();
+        }
+
+        return num_keys;
+      } else {
+        // Couldnt retrieve one time keys
+        data = original_data;
+        return 0;
+      }
+    } else {
+      // Couldnt generate one time keys
+      data = original_data;
+      return 0;
+    }
+  } catch (const json::exception &e) {
+    cout << "Encountered an issue during json serialization/deserialization: "
+         << endl
+         << e.what() << endl;
+    data = original_data;
+    return 0;
+  } catch (const exception &e) {
+    cout << "Encountered an issue during signed key generation: " << endl
+         << e.what() << endl;
+    data = original_data;
+    return 0;
+  }
 }
 
 // TODO add synchronization
 void MatrixOlmWrapper::replenishKeyJob() {
-  // Call upload keys to figure out how many keys are present
-  std::string empty = "{}";
-  uploadKeys(empty, [this](const std::string &key_counts,
-                           std::experimental::optional<std::string>) {
-    int current_key_count = 0;
-    if (!key_counts.empty() &&
-        json::parse(key_counts).count("one_time_key_counts") == 1) {
-      current_key_count =
-          json::parse(key_counts)["one_time_key_counts"]["signed_curve25519"]
-              .get<int>();
-    }
-
-    int keys_needed =
-        static_cast<int>(olm_account_max_number_of_one_time_keys(acct)) -
-        current_key_count;
-
-    if (keys_needed) {
-      json data;
-      if (genSignedKeys(data, keys_needed) > 0 && uploadKeys != nullptr) {
-        std::string data_string = data.dump(2);
-        uploadKeys(
-            data_string, [this, current_key_count](
-                             const std::string &resp,
-                             std::experimental::optional<std::string> err) {
-              if (!err) {
-                std::cout << "publishing one time keys returned: " << resp
-                          << std::endl;
-                if (json::parse(
-                        resp)["one_time_key_counts"]["signed_curve25519"]
-                        .get<int>() > current_key_count) {
-                  olm_account_mark_keys_as_published(acct);
-                }
-              }
-            });
+  try {
+    // Call upload keys to figure out how many keys are present
+    string empty = "{}";
+    uploadKeys(empty, [this](const string &key_counts,
+                             experimental::optional<string>) {
+      int current_key_count = 0;
+      if (!key_counts.empty() &&
+          json::parse(key_counts).count("one_time_key_counts") == 1) {
+        current_key_count =
+            json::parse(key_counts)["one_time_key_counts"]["signed_curve25519"]
+                .get<int>();
       }
-    }
-  });
+
+      int keys_needed = static_cast<int>(acct->max_number_of_one_time_keys()) -
+                        current_key_count;
+
+      if (keys_needed) {
+        json data;
+        if (genSignedKeys(data, keys_needed) > 0 && uploadKeys != nullptr) {
+          string data_string = data.dump(2);
+          uploadKeys(data_string, [this, current_key_count](
+                                      const string &resp,
+                                      experimental::optional<string> err) {
+            if (!err) {
+              cout << "publishing one time keys returned: " << resp << endl;
+              if (json::parse(resp)["one_time_key_counts"]["signed_curve25519"]
+                      .get<int>() > current_key_count) {
+                acct->mark_keys_as_published();
+              }
+            }
+          });
+        }
+      }
+    });
+  } catch (const json::exception &e) {
+    cout << "Encountered an issue during json serialization/deserialization: "
+         << endl
+         << e.what() << endl;
+    return;
+  } catch (const exception &e) {
+    cout << "Encountered an issue during key replenishment: " << endl
+         << e.what() << endl;
+    return;
+  }
 }
 
-OlmAccount *MatrixOlmWrapper::loadAccount(std::string keyfile_path,
-                                          std::string keyfile_pass) {
-  OlmAccount *acct;
+shared_ptr<olm::Account> MatrixOlmWrapper::loadAccount(string keyfile_path,
+                                                       string keyfile_pass) {
+  shared_ptr<olm::Account> acct(new olm::Account);
   if (keyfile_path == "" && keyfile_pass == "") {
-    std::unique_ptr<uint8_t[]> memory(new uint8_t[olm_account_size()]);
-    std::unique_ptr<uint8_t[]> random;
-    int random_size;
-
-    acct = olm_account(memory.get());
-    random_size = olm_create_account_random_length(acct);
-    random = getRandData(random_size);
-    if (olm_error() != olm_create_account(acct, random.get(), random_size)) {
-
-      std::thread([this]() {
+    int random_size = acct->new_account_random_length();
+    unique_ptr<uint8_t[]> random = getRandData(random_size);
+    if (size_t(-1) != acct->new_account(random.get(), random_size)) {
+      thread([this]() {
         while (true) {
           setupIdentityKeys();
           if (id_published) {
             replenishKeyJob();
           }
-          std::this_thread::sleep_for(std::chrono::minutes(10));
+          this_thread::sleep_for(chrono::minutes(10));
         }
       })
           .detach();
 
       return acct;
+    } else {
+      // Error occurred, throw exception
+      return nullptr;
     }
-
-    return nullptr;
   } else {
     // Stubbed functionality
     return nullptr;
