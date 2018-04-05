@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <string>
 
 #include "olm/base64.hh"
 #include "olm/utility.hh"
@@ -88,15 +89,18 @@ bool verify(json &message,
   try {
     string user = message["signatures"].begin().key();
     string algo_device = message["signatures"].begin().value().begin().key();
-    string device =
-        algo_device.substr(algo_device.find(':'), algo_device.size());
-    cout << "device: " << device << endl;
+    if(algo_device.find(':') == string::npos) {
+      return false;
+    }
 
+    string device =
+        algo_device.substr(algo_device.find(':')+1, algo_device.size());
     string key = verified[user][device];
     if (key.empty()) {
       cout << "User device combo isnt verified" << endl;
       return false;
     }
+
     return verify(message, key);
   } catch (exception &e) {
     cout << "Encountered an issue during verification: " << endl
@@ -125,7 +129,7 @@ void MatrixOlmWrapper::setupIdentityKeys() {
     if (!identity_keys_.empty() && uploadKeys != nullptr) {
       try {
         json id = json::parse(identity_keys_);
-        json keyData = {
+        json key_data = {
             {"algorithms",
              {"m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"}},
             {"keys",
@@ -135,11 +139,18 @@ void MatrixOlmWrapper::setupIdentityKeys() {
             {"user_id", user_id_}};
 
         // Sign keyData
-        string keyString = keyData.dump();
-        uploadKeys(keyString,
-                   [this](const string &, experimental::optional<string> err) {
+        string sig = signData(key_data, acct);
+        key_data["signatures"][user_id_]["ed25519:" + device_id_] = sig;
+
+        // Upload keys
+        string key_string = key_data.dump();
+        uploadKeys(key_string,
+                   [id,this](const string &, experimental::optional<string> err) {
                      if (!err) {
                        id_published = true;
+
+                       // Add our keys to our list of verified devices
+                       verified[user_id_][device_id_] = id["ed25519"].get<string>();
                      }
                    });
       } catch (const json::exception &e) {
