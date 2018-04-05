@@ -5,20 +5,34 @@
 #include <thread>
 
 #include "olm/base64.hh"
+#include "olm/utility.hh"
 
 #include <sodium.h>
 #include <stdlib.h>
 
-/*
- * buffer_size is the size of the buffer in number of bytes
- */
+////////////////////////////////////////////////////////////
+//                    Helper Functions                    //
+////////////////////////////////////////////////////////////
+// buffer_size is the size of the buffer in number of bytes
 unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
   unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
   randombytes_buf(buffer.get(), buffer_size);
   return buffer;
 }
 
-string signData(string message, shared_ptr<olm::Account> acct) {
+// Encodes the json object to a properly formatted string (According to
+// https://matrix.org/speculator/spec/HEAD/appendices.html#signing-json)
+void toSignable(json data, string &encoded) {
+  // Remove data which shouldnt be signed
+  data.erase("signatures");
+  data.erase("unsigned");
+
+  // Keys encoded in alphabetical order with no whitespace
+  encoded = data.dump();
+}
+
+// Generate a base64 encoded signature
+string signData(const string &message, shared_ptr<olm::Account> acct) {
   int m_len = message.size();
   const uint8_t *m = reinterpret_cast<const uint8_t *>(message.c_str());
   int sig_len = acct->signature_length();
@@ -33,7 +47,67 @@ string signData(string message, shared_ptr<olm::Account> acct) {
   }
   return string();
 }
+string signData(const json &message, shared_ptr<olm::Account> acct) {
+  string m;
+  toSignable(message, m);
+  return signData(m, acct);
+}
 
+// Verify a signature
+bool verify(string &message, string &sig, _olm_ed25519_public_key &key) {
+  const uint8_t *m = reinterpret_cast<const uint8_t *>(message.c_str());
+
+  int sig_dec_len = olm::decode_base64_length(sig.size());
+  const uint8_t *s = reinterpret_cast<const uint8_t *>(sig.c_str());
+  unique_ptr<uint8_t[]> sig_dec(new uint8_t[sig_dec_len]);
+  olm::decode_base64(s, sig.size(), sig_dec.get());
+
+  return size_t(0) == olm::Utility().ed25519_verify(key, m, message.size(),
+                                                    sig_dec.get(), sig_dec_len);
+}
+bool verify(string &message, string &sig, string &key) {
+  // Decode key to char array
+  int key_dec_len = olm::decode_base64_length(key.size());
+  if (key_dec_len == ED25519_PUBLIC_KEY_LENGTH) {
+    struct _olm_ed25519_public_key pub_key;
+    const uint8_t *k = reinterpret_cast<const uint8_t *>(key.c_str());
+    olm::decode_base64(k, key.size(), pub_key.public_key);
+    return verify(message, sig, pub_key);
+  }
+  return false;
+}
+bool verify(json &message, string &key) {
+  // sig = signatures.user_id.key
+  string sig = message["signatures"].begin().value().begin().value();
+  string m_formatted;
+  toSignable(message, m_formatted);
+  return verify(m_formatted, sig, key);
+}
+bool verify(json &message,
+            unordered_map<string, unordered_map<string, string>> &verified) {
+  try {
+    string user = message["signatures"].begin().key();
+    string algo_device = message["signatures"].begin().value().begin().key();
+    string device =
+        algo_device.substr(algo_device.find(':'), algo_device.size());
+    cout << "device: " << device << endl;
+
+    string key = verified[user][device];
+    if (key.empty()) {
+      cout << "User device combo isnt verified" << endl;
+      return false;
+    }
+    return verify(message, key);
+  } catch (exception &e) {
+    cout << "Encountered an issue during verification: " << endl
+         << e.what() << endl;
+    return false;
+  }
+}
+
+////////////////////////////////////////////////////////////
+//                   Member Functions                     //
+////////////////////////////////////////////////////////////
 void MatrixOlmWrapper::setupIdentityKeys() {
   if (!id_published) {
     if (identity_keys_.empty()) {
@@ -60,6 +134,7 @@ void MatrixOlmWrapper::setupIdentityKeys() {
             {"device_id:", device_id_},
             {"user_id", user_id_}};
 
+        // Sign keyData
         string keyString = keyData.dump();
         uploadKeys(keyString,
                    [this](const string &, experimental::optional<string> err) {
@@ -91,8 +166,7 @@ json MatrixOlmWrapper::signKey(json &key) {
   json to_sign, signed_key;
   try {
     to_sign["key"] = key.begin().value();
-    string m = to_sign.dump(2);
-    string signature = signData(m, acct);
+    string signature = signData(to_sign, acct);
     if (!signature.empty()) {
       signed_key = {{"signed_curve25519:" + key.begin().key(),
                      {{to_sign.begin().key(), to_sign.begin().value()},
