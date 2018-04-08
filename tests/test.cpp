@@ -37,10 +37,22 @@ void uploadKeys(
   callback(response.dump(), std::experimental::optional<std::string>());
 }
 
+bool promptVerifyDevice(std::string &usr, std::string &dev, std::string &key) {
+  std::string verified;
+  while (verified != "Y" && verified != "N") {
+    std::cout << "Do you trust \"" << usr << "\"\'s device, \"" << dev
+              << "\", with key: \"" << key << "\"?(Y/N): ";
+    std::cin >> verified;
+    std::cout << endl;
+  }
+  return verified == "Y";
+}
+
 int main() {
   // Simple sanity check to verify function linking works
   MatrixOlmWrapper m("HeartOfGold", "Zaphod");
   m.uploadKeys = uploadKeys;
+  m.promptVerifyDevice = promptVerifyDevice;
 
   /*
   std::string arg =

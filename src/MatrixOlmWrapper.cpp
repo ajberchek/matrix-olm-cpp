@@ -2,8 +2,8 @@
 
 #include <chrono>
 #include <memory>
-#include <thread>
 #include <string>
+#include <thread>
 
 #include "olm/base64.hh"
 #include "olm/utility.hh"
@@ -19,6 +19,54 @@ unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
   unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
   randombytes_buf(buffer.get(), buffer_size);
   return buffer;
+}
+
+// returns (success_status, user_id, device_id, ed25519_key) if found
+tuple<bool, string, string, string> getMsgInfo(json &m) {
+  tuple<bool, string, string, string> unsuccessful;
+  try {
+    string user = m["signatures"].begin().key();
+    string algo_dev = m["signatures"].begin().value().begin().key();
+    if (algo_dev.find(':') == string::npos) {
+      return unsuccessful;
+    }
+
+    string dev = algo_dev.substr(algo_dev.find(':') + 1, algo_dev.size());
+    string sentKey = m["keys"]["ed25519:" + dev];
+    return {true, user, dev, sentKey};
+  } catch (exception &e) {
+    cout << "Encountered an issue during Message Sender Info Retrieval: "
+         << endl
+         << e.what() << endl;
+    return unsuccessful;
+  }
+}
+bool getMsgUsrId(json &m, string &usr) {
+  auto info = getMsgInfo(m);
+  if (get<0>(info)) {
+    usr = get<1>(info);
+    return true;
+  } else {
+    return false;
+  }
+}
+bool getMsgDevId(json &m, string &dev) {
+  auto info = getMsgInfo(m);
+  if (get<0>(info)) {
+    dev = get<2>(info);
+    return true;
+  } else {
+    return false;
+  }
+}
+bool getMsgKey(json &m, string &key) {
+  auto info = getMsgInfo(m);
+  if (get<0>(info)) {
+    key = get<3>(info);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // Encodes the json object to a properly formatted string (According to
@@ -84,24 +132,27 @@ bool verify(json &message, string &key) {
   toSignable(message, m_formatted);
   return verify(m_formatted, sig, key);
 }
-bool verify(json &message,
-            unordered_map<string, unordered_map<string, string>> &verified) {
+bool verify(json &message, MatrixOlmWrapper *wrap) {
   try {
-    string user = message["signatures"].begin().key();
-    string algo_device = message["signatures"].begin().value().begin().key();
-    if(algo_device.find(':') == string::npos) {
+    string usr, dev;
+    if (!getMsgUsrId(message, usr) || !getMsgDevId(message, dev)) {
       return false;
     }
 
-    string device =
-        algo_device.substr(algo_device.find(':')+1, algo_device.size());
-    string key = verified[user][device];
+    // A valid public key should never be ""
+    string key = wrap->getUserDeviceKey(usr, dev);
     if (key.empty()) {
       cout << "User device combo isnt verified" << endl;
-      return false;
+      string sentKey;
+      if (getMsgKey(message, sentKey) && wrap->promptVerifyDevice != nullptr &&
+          wrap->promptVerifyDevice(usr, dev, sentKey)) {
+        return verify(message, sentKey);
+      } else {
+        return false;
+      }
+    } else {
+      return verify(message, key);
     }
-
-    return verify(message, key);
   } catch (exception &e) {
     cout << "Encountered an issue during verification: " << endl
          << e.what() << endl;
@@ -142,17 +193,20 @@ void MatrixOlmWrapper::setupIdentityKeys() {
         string sig = signData(key_data, acct);
         key_data["signatures"][user_id_]["ed25519:" + device_id_] = sig;
 
+        // Simple test below to show how verify works
+        //cout << verify(key_data, this) << "<-Verified" << endl;
+
         // Upload keys
         string key_string = key_data.dump();
-        uploadKeys(key_string,
-                   [id,this](const string &, experimental::optional<string> err) {
-                     if (!err) {
-                       id_published = true;
+        uploadKeys(key_string, [id, this](const string &,
+                                          experimental::optional<string> err) {
+          if (!err) {
+            id_published = true;
 
-                       // Add our keys to our list of verified devices
-                       verified[user_id_][device_id_] = id["ed25519"].get<string>();
-                     }
-                   });
+            // Add our keys to our list of verified devices
+            verified[user_id_][device_id_] = id["ed25519"].get<string>();
+          }
+        });
       } catch (const json::exception &e) {
         cout << "Encountered an issue during json "
                 "serialization/deserialization: "
