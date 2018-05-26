@@ -39,4 +39,4 @@ install:
     - ./.ci/install.sh
 
 script:
-    - ./.ci/script.sh
+    - ./.ci/run.sh
