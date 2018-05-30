@@ -2,8 +2,8 @@
 
 #include <chrono>
 #include <memory>
-#include <thread>
 #include <string>
+#include <thread>
 
 #include "olm/base64.hh"
 #include "olm/utility.hh"
@@ -19,6 +19,57 @@ unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
   unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
   randombytes_buf(buffer.get(), buffer_size);
   return buffer;
+}
+
+// returns (success_status, user_id, device_id, ed25519_key) if found
+tuple<bool, string, string, string> getMsgInfo(json &m) {
+  tuple<bool, string, string, string> unsuccessful;
+  try {
+    string user = m["signatures"].begin().key();
+    string algo_dev = m["signatures"].begin().value().begin().key();
+    if (algo_dev.find(':') == string::npos) {
+      return unsuccessful;
+    }
+
+    string dev = algo_dev.substr(algo_dev.find(':') + 1, algo_dev.size());
+    string sentKey;
+    if(m.count("keys") > 0) {
+      string sentKey = m["keys"]["ed25519:" + dev];
+    }
+    return {true, user, dev, sentKey};
+  } catch (exception &e) {
+    cout << "Encountered an issue during Message Sender Info Retrieval: "
+         << endl
+         << e.what() << endl;
+    return unsuccessful;
+  }
+}
+bool getMsgUsrId(json &m, string &usr) {
+  auto info = getMsgInfo(m);
+  if (get<0>(info)) {
+    usr = get<1>(info);
+    return true;
+  } else {
+    return false;
+  }
+}
+bool getMsgDevId(json &m, string &dev) {
+  auto info = getMsgInfo(m);
+  if (get<0>(info)) {
+    dev = get<2>(info);
+    return true;
+  } else {
+    return false;
+  }
+}
+bool getMsgKey(json &m, string &key) {
+  auto info = getMsgInfo(m);
+  if (get<0>(info)) {
+    key = get<3>(info);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // Encodes the json object to a properly formatted string (According to
@@ -57,7 +108,6 @@ string signData(const json &message, shared_ptr<olm::Account> acct) {
 // Verify a signature
 bool verify(string &message, string &sig, _olm_ed25519_public_key &key) {
   const uint8_t *m = reinterpret_cast<const uint8_t *>(message.c_str());
-
   int sig_dec_len = olm::decode_base64_length(sig.size());
   const uint8_t *s = reinterpret_cast<const uint8_t *>(sig.c_str());
   unique_ptr<uint8_t[]> sig_dec(new uint8_t[sig_dec_len]);
@@ -84,24 +134,28 @@ bool verify(json &message, string &key) {
   toSignable(message, m_formatted);
   return verify(m_formatted, sig, key);
 }
-bool verify(json &message,
-            unordered_map<string, unordered_map<string, string>> &verified) {
+bool verify(json &message, MatrixOlmWrapper *wrap) {
   try {
-    string user = message["signatures"].begin().key();
-    string algo_device = message["signatures"].begin().value().begin().key();
-    if(algo_device.find(':') == string::npos) {
+    string usr, dev;
+    if (!getMsgUsrId(message, usr) || !getMsgDevId(message, dev)) {
       return false;
     }
 
-    string device =
-        algo_device.substr(algo_device.find(':')+1, algo_device.size());
-    string key = verified[user][device];
+    // A valid public key should never be ""
+    string key = wrap->getUserDeviceKey(usr, dev);
+    // TODO check for empty key
     if (key.empty()) {
-      cout << "User device combo isnt verified" << endl;
-      return false;
+      string sentKey;
+      if (getMsgKey(message, sentKey) && wrap->promptVerifyDevice != nullptr &&
+          wrap->promptVerifyDevice(usr, dev, sentKey)) {
+        wrap->verifyDevice(usr,dev,sentKey);
+        return verify(message, sentKey);
+      } else {
+        return false;
+      }
+    } else {
+      return verify(message, key);
     }
-
-    return verify(message, key);
   } catch (exception &e) {
     cout << "Encountered an issue during verification: " << endl
          << e.what() << endl;
@@ -142,23 +196,18 @@ void MatrixOlmWrapper::setupIdentityKeys() {
         string sig = signData(key_data, acct);
         key_data["signatures"][user_id_]["ed25519:" + device_id_] = sig;
 
+        
         // Upload keys
         string key_string = key_data.dump();
-        uploadKeys(key_string,
-                   [id,this](const string &, experimental::optional<string> err) {
-                     if (!err) {
-                       id_published = true;
+        uploadKeys(key_string, [id, this](const string &,
+                                          experimental::optional<string> err) {
+          if (!err) {
+            id_published = true;
 
-                       // Add our keys to our list of verified devices
-                       verified[user_id_][device_id_] = id["ed25519"].get<string>();
-                     }
-                   });
-      } catch (const json::exception &e) {
-        cout << "Encountered an issue during json "
-                "serialization/deserialization: "
-             << endl
-             << e.what() << endl;
-        return;
+            // Add our keys to our list of verified devices
+            verified[user_id_][device_id_] = id["ed25519"].get<string>();
+          }
+        });
       } catch (const exception &e) {
         cout << "Encountered an issue during identity key setup: " << endl
              << e.what() << endl;
@@ -188,11 +237,6 @@ json MatrixOlmWrapper::signKey(json &key) {
       // Couldnt sign properly, return nullptr to signify this
       return nullptr;
     }
-  } catch (const json::exception &e) {
-    cout << "Encountered an issue during json serialization/deserialization: "
-         << endl
-         << e.what() << endl;
-    return nullptr;
   } catch (const exception &e) {
     cout << "Encountered an issue during key signing: " << endl
          << e.what() << endl;
@@ -211,7 +255,6 @@ int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
   unique_ptr<uint8_t[]> rand_data = getRandData(rand_length);
   json original_data = data;
   try {
-
     if (size_t(-1) !=
         acct->generate_one_time_keys(num_keys, rand_data.get(), rand_length)) {
       int keys_size = acct->get_one_time_keys_json_length();
@@ -231,7 +274,8 @@ int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
           }
           data["one_time_keys"][signed_key.begin().key()] =
               signed_key.begin().value();
-        }
+
+                  }
 
         return num_keys;
       } else {
@@ -244,12 +288,6 @@ int MatrixOlmWrapper::genSignedKeys(json &data, int num_keys) {
       data = original_data;
       return 0;
     }
-  } catch (const json::exception &e) {
-    cout << "Encountered an issue during json serialization/deserialization: "
-         << endl
-         << e.what() << endl;
-    data = original_data;
-    return 0;
   } catch (const exception &e) {
     cout << "Encountered an issue during signed key generation: " << endl
          << e.what() << endl;
@@ -279,12 +317,14 @@ void MatrixOlmWrapper::replenishKeyJob() {
       if (keys_needed) {
         json data;
         if (genSignedKeys(data, keys_needed) > 0 && uploadKeys != nullptr) {
+          // Simple test below to show how verify works
+          json check_sig(data["one_time_keys"].begin().value());
+
           string data_string = data.dump(2);
           uploadKeys(data_string, [this, current_key_count](
                                       const string &resp,
                                       experimental::optional<string> err) {
             if (!err) {
-              cout << "publishing one time keys returned: " << resp << endl;
               if (json::parse(resp)["one_time_key_counts"]["signed_curve25519"]
                       .get<int>() > current_key_count) {
                 acct->mark_keys_as_published();
@@ -294,11 +334,6 @@ void MatrixOlmWrapper::replenishKeyJob() {
         }
       }
     });
-  } catch (const json::exception &e) {
-    cout << "Encountered an issue during json serialization/deserialization: "
-         << endl
-         << e.what() << endl;
-    return;
   } catch (const exception &e) {
     cout << "Encountered an issue during key replenishment: " << endl
          << e.what() << endl;
@@ -320,6 +355,7 @@ shared_ptr<olm::Account> MatrixOlmWrapper::loadAccount(string keyfile_path,
             replenishKeyJob();
           }
           this_thread::sleep_for(chrono::minutes(10));
+          //this_thread::sleep_for(chrono::seconds(1));
         }
       })
           .detach();
