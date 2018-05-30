@@ -2,7 +2,7 @@
 
 language: cpp
 sudo: required
-dist: xenial
+dist: zesty
 
 notifications:
     email: false
@@ -28,7 +28,7 @@ matrix:
               - C_COMPILER=clang-6.0
           addons:
               apt:
-                  sources: ["ubuntu-toolchain-r-test", "llvm-toolchain-xenial-6.0"]
+                  sources: ["ubuntu-toolchain-r-test", "llvm-toolchain-zesty-6.0"]
                   packages: ["clang-6.0", "ninja-build"]
 
 before_install:
