@@ -2,7 +2,7 @@
 
 language: cpp
 sudo: required
-dist: trusty
+dist: xenial
 
 notifications:
     email: false
@@ -24,12 +24,12 @@ matrix:
         - os: linux
           compiler: clang
           env:
-              - CXX_COMPILER=clang++-5.0
-              - C_COMPILER=clang-5.0
+              - CXX_COMPILER=clang++-6.0
+              - C_COMPILER=clang-6.0
           addons:
               apt:
-                  sources: ["ubuntu-toolchain-r-test", "llvm-toolchain-trusty-5.0"]
-                  packages: ["clang-5.0", "ninja-build"]
+                  sources: ["ubuntu-toolchain-r-test", "llvm-toolchain-xenial-6.0"]
+                  packages: ["clang-6.0", "ninja-build"]
 
 before_install:
     - export CXX=${CXX_COMPILER}
