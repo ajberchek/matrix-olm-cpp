@@ -29,7 +29,7 @@ matrix:
           addons:
               apt:
                   sources: ["llvm-toolchain-trusty-5.0"]
-                  packages: ["clang-5.0"]
+                  packages: ["clang-5.0", "g++-7"]
 
 before_install:
     - export CXX=${CXX_COMPILER}
