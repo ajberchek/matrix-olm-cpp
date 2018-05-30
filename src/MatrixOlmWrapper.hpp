@@ -49,14 +49,19 @@ public:
   void decryptAndVerify(const string &secured_message,
                         function<void(const string &message, wrapperError)>);
 
-  // Adds a user_id+pair<device_id,pub_key> to the list of verified devices
-  // to_verify is the canonically formatted user_id being added to the verified
-  // list. device_and_key contain a is the canonically formatted device_id and
-  // formatted public key corresponding to that user and device ID you would
-  // like to verify. This pair is to be added in conjunction with the user_id to
-  // the verified list
-  void verifyDevice(const string &toVerify,
-                    const pair<string, string> device_and_key);
+  // Adds a user_id-><device_id,pub_key> to the list of verified devices
+  void verifyDevice(const string &user_id, const string &device_id,
+                    const string &key) {
+    verified[user_id][device_id] = key;
+  }
+
+  string getUserDeviceKey(const string &user_id, const string &device_id) {
+    if(verified.find(user_id) != verified.end() && verified[user_id].find(device_id) != verified[user_id].end()) {
+      return verified[user_id][device_id];
+    } else {
+      return "";
+    }
+  }
 
 public:
   // Public Variables
@@ -88,6 +93,14 @@ public:
   function<void(string &from, string &to,
                 function<void(const string &key_changes, keyRequestErr)>)>
       getKeyChanges;
+
+  // Function implemented by client that this wrapper should call when it is
+  // requested to verify a device that is untrusted.
+  // This should prompt the user to verify or deny that they trust the device.
+  // Return true if the user decided to verify the device, and false otherwise.
+  // If true, then verifyDevice will be called with these parameters as well.
+  function<bool(string &user_id, string &dev_id, string &fingerprint_key)>
+      promptVerifyDevice;
 
   // device_id associated with the client this wrapper is providing
   // functionality to

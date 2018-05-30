@@ -3,12 +3,13 @@
 #include <iostream>
 #include <json.hpp>
 #include <memory>
+#include <thread>
 
 #include "MatrixOlmWrapper.hpp"
 
 std::unordered_map<std::string, int> key_counts;
 
-// Svubbed function to "Upload Keys" which really just returns back dummy data
+// Stubbed function to "Upload Keys" which really just returns back dummy data
 // to verify the functionality of MatrixOlmWrapper's key management
 void uploadKeys(
     std::string &key_upload,
@@ -37,10 +38,22 @@ void uploadKeys(
   callback(response.dump(), std::experimental::optional<std::string>());
 }
 
+bool promptVerifyDevice(std::string &usr, std::string &dev, std::string &key) {
+  std::string verified;
+  while (verified != "Y" && verified != "N") {
+    std::cout << "Do you trust \"" << usr << "\"\'s device, \"" << dev
+              << "\", with key: \"" << key << "\"?(Y/N): ";
+    std::cin >> verified;
+    std::cout << endl;
+  }
+  return verified == "Y";
+}
+
 int main() {
   // Simple sanity check to verify function linking works
   MatrixOlmWrapper m("HeartOfGold", "Zaphod");
   m.uploadKeys = uploadKeys;
+  m.promptVerifyDevice = promptVerifyDevice;
 
   /*
   std::string arg =
@@ -68,6 +81,6 @@ int main() {
     std::cout << "Current key count for this device: " << res << std::endl;
   });
   */
-  while (true)
-    ;
+ 
+  this_thread::sleep_for(chrono::seconds(10));
 }
