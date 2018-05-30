@@ -51,10 +51,16 @@ public:
 
   // Adds a user_id-><device_id,pub_key> to the list of verified devices
   void verifyDevice(const string &user_id, const string &device_id,
-                    const string &key);
+                    const string &key) {
+    verified[user_id][device_id] = key;
+  }
 
   string getUserDeviceKey(const string &user_id, const string &device_id) {
-    return verified[user_id][device_id];
+    if(verified.find(user_id) != verified.end() && verified[user_id].find(device_id) != verified[user_id].end()) {
+      return verified[user_id][device_id];
+    } else {
+      return "";
+    }
   }
 
 public:
@@ -91,9 +97,8 @@ public:
   // Function implemented by client that this wrapper should call when it is
   // requested to verify a device that is untrusted.
   // This should prompt the user to verify or deny that they trust the device.
-  // This simply notifies the user that there is an untrusted device, for this
-  // decision to perist, please call the verifyDevice function.
   // Return true if the user decided to verify the device, and false otherwise.
+  // If true, then verifyDevice will be called with these parameters as well.
   function<bool(string &user_id, string &dev_id, string &fingerprint_key)>
       promptVerifyDevice;
 
