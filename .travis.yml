@@ -2,7 +2,7 @@
 
 language: cpp
 sudo: required
-dist: zesty
+dist: trusty
 
 notifications:
     email: false
@@ -15,21 +15,21 @@ matrix:
         - os: linux
           compiler: gcc
           env:
-              - CXX_COMPILER=g++-7
-              - C_COMPILER=gcc-7
+              - CXX_COMPILER=g++-6
+              - C_COMPILER=gcc-6
           addons:
               apt:
                   sources: ["ubuntu-toolchain-r-test"]
-                  packages: ["g++-7", "ninja-build"]
+                  packages: ["g++-6", "ninja-build"]
         - os: linux
           compiler: clang
           env:
-              - CXX_COMPILER=clang++-6.0
-              - C_COMPILER=clang-6.0
+              - CXX_COMPILER=clang++-5.0
+              - C_COMPILER=clang-5.0
           addons:
               apt:
-                  sources: ["ubuntu-toolchain-r-test", "llvm-toolchain-zesty-6.0"]
-                  packages: ["clang-6.0", "ninja-build"]
+                  sources: ["ubuntu-toolchain-r-test", "llvm-toolchain-trusty-5.0"]
+                  packages: ["clang-5.0", "ninja-build"]
 
 before_install:
     - export CXX=${CXX_COMPILER}
