@@ -1,7 +1,7 @@
 set -ex
 
 # Linting
-make lint
+#make lint
 
 # Building
 make
