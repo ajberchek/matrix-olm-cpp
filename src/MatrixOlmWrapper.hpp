@@ -2,7 +2,6 @@
 
 #include <experimental/optional>
 #include <functional>
-#include <future>
 #include <iostream>
 #include <memory>
 #include <tuple>
@@ -33,20 +32,19 @@ class MatrixOlmWrapper {
     // The signAndEncrypt, decryptAndVerify, and verifyDevice functions should be
     // called by the client when sending and receiving messages. Provided string
     // data should be the string version of the json object related to the
-    // operation described unless otherwise specified. These functions take in
-    // function callbacks since they may call asynchronous functions themselves.
+    // operation described unless otherwise specified.
     using wrapperError = experimental::optional<string>;
     using APIRet       = tuple<string, wrapperError>;
 
-    // Signs and encrypts the message passed in to the specified user, then returns a future
-    // that will eventually be populated by a tuple containing the encrypted data in json format
-    future<APIRet> signAndEncrypt(const string& to_user_id, const string& message);
+    // Signs and encrypts the message passed in to the specified user, then returns
+    // a tuple containing the encrypted data in json format
+    APIRet signAndEncrypt(const string& to_user_id, const string& message);
 
-    // Decrypts and verifies the signature of the received message, then populates a future
-    // object with a tuple containing the plaintext message. Upon a failed signature
+    // Decrypts and verifies the signature of the received message, then returns
+    // a tuple containing the plaintext message. Upon a failed signature
     // verification, the message and an error will be passed back to the callback. This way the
     // client can choose what to do with the unverified message
-    future<APIRet> decryptAndVerify(const string& secured_message);
+    APIRet decryptAndVerify(const string& secured_message);
 
     // Adds a user_id-><device_id,pub_key> to the list of verified devices
     void verifyDevice(const string& user_id, const string& device_id, const string& key) {
@@ -74,21 +72,21 @@ class MatrixOlmWrapper {
     using matrAPIRet    = tuple<string, keyRequestErr>;
     // Uploads device keys to /_matrix/client/r0/keys/upload
     // Return: (upload_response, keyRequestErr)
-    function<future<matrAPIRet>(string& key_upload)> uploadKeys;
+    function<matrAPIRet(string& key_upload)> uploadKeys;
     // Returns current device and id keys for the given user from
     // /_matrix/client/r0/keys/query user_id is the canonical representation of
     // the user_id who's keys we are requesting
     // Return: (key_response, keyRequestErr)
-    function<future<matrAPIRet>(string& user_id)> queryKeys;
+    function<matrAPIRet(string& user_id)> queryKeys;
     // Claims one-time keys for use in pre-key messages via
     // /_matrix/client/r0/keys/claim
     // Return: (claimed_key, keyRequestErr)
-    function<future<matrAPIRet>(string& key_claim)> claimKeys;
+    function<matrAPIRet(string& key_claim)> claimKeys;
     // Gets a list of users who updated their device identity keys since a
     // previous sync token by contacting /_matrix/client/r0/keys/changes from is
     // the desired start point of the list to is the desired end point of the list
     // Return: (key_changes, keyRequestErr)
-    function<future<matrAPIRet>(string& from, string& to)> getKeyChanges;
+    function<matrAPIRet(string& from, string& to)> getKeyChanges;
 
     // Function implemented by client that this wrapper should call when it is
     // requested to verify a device that is untrusted.

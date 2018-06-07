@@ -1,7 +1,6 @@
 #include "MatrixOlmWrapper.hpp"
 
 #include <chrono>
-#include <future>
 #include <memory>
 #include <string>
 #include <thread>
@@ -195,7 +194,7 @@ void MatrixOlmWrapper::setupIdentityKeys() {
 
                 // Upload keys
                 string key_string           = key_data.dump();
-                matrAPIRet individKeyUpload = uploadKeys(key_string).get();
+                matrAPIRet individKeyUpload = uploadKeys(key_string);
                 auto err                    = get<1>(individKeyUpload);
                 if (!err) {
                     id_published = true;
@@ -288,7 +287,7 @@ void MatrixOlmWrapper::replenishKeyJob() {
     try {
         // Call upload keys to figure out how many keys are present
         string empty          = "{}";
-        matrAPIRet keyCount   = uploadKeys(empty).get();
+        matrAPIRet keyCount   = uploadKeys(empty);
         string key_counts     = get<0>(keyCount);
         int current_key_count = 0;
         if (!key_counts.empty() && json::parse(key_counts).count("one_time_key_counts") == 1) {
@@ -305,7 +304,7 @@ void MatrixOlmWrapper::replenishKeyJob() {
                 json check_sig(data["one_time_keys"].begin().value());
 
                 string data_string       = data.dump(2);
-                matrAPIRet massKeyUpload = uploadKeys(data_string).get();
+                matrAPIRet massKeyUpload = uploadKeys(data_string);
                 string resp              = get<0>(massKeyUpload);
                 auto err                 = get<1>(massKeyUpload);
                 if (!err) {

@@ -9,7 +9,9 @@
 
 std::unordered_map<std::string, int> key_counts;
 
-MatrixOlmWrapper::matrAPIRet emulate_key_upload(std::string key_upload) {
+// Stubbed function to "Upload Keys" which really just returns back dummy data
+// to verify the functionality of MatrixOlmWrapper's key management
+MatrixOlmWrapper::matrAPIRet uploadKeys(std::string& key_upload) {
     /*
     std::cout << "Upload Keys is uploading: " << std::endl
               << nlohmann::json::parse(key_upload).dump(2) << std::endl;
@@ -32,13 +34,6 @@ MatrixOlmWrapper::matrAPIRet emulate_key_upload(std::string key_upload) {
     std::cout << "Client just uploaded " << total_uploaded << " keys" << std::endl;
 
     return {response.dump(), std::experimental::optional<std::string>()};
-}
-
-// Stubbed function to "Upload Keys" which really just returns back dummy data
-// to verify the functionality of MatrixOlmWrapper's key management
-future<MatrixOlmWrapper::matrAPIRet> uploadKeys(std::string& key_upload_str) {
-    // TODO: Does this reference go out of scope? Should I copy by value?
-    return std::async(std::launch::async, emulate_key_upload, key_upload_str);
 }
 
 bool promptVerifyDevice(std::string& usr, std::string& dev, std::string& key) {
