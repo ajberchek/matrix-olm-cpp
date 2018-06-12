@@ -11,11 +11,16 @@ This repo provides a C++ wrapper for the library, [libolm](https://git.matrix.or
 - C++ 11 compiler
 - Clang format 3.5
 - [Libsodium](https://download.libsodium.org/doc/)
+- GoogleTest [Install Guide for Ubuntu](https://www.eriksmistad.no/getting-started-with-google-test-on-ubuntu/)
 - Libolm (Automatically downloaded and integrated during build)
 
 **Building**
 
 To build the library, simply run `make`
+
+**Testing**
+
+To test the library, simplpy run `make test`
 
 ## Contributing Instructions
 

@@ -4,6 +4,7 @@
 #include <json.hpp>
 #include <memory>
 #include <thread>
+#include <gtest/gtest.h>
 
 #include "MatrixOlmWrapper.hpp"
 
@@ -47,7 +48,19 @@ bool promptVerifyDevice(std::string& usr, std::string& dev, std::string& key) {
     return verified == "Y";
 }
 
-int main() {
+// TODO replace with a deterministic test
+TEST(InterfaceTest, UploadsExpectedNumKeys) {
+
+    int expected_key_count = 100;
+    int total_sum = 0;
+    for(auto& elem : key_counts) {
+        total_sum += elem.second;
+    }
+    
+    ASSERT_EQ(expected_key_count, total_sum);
+}
+
+int main(int argc, char **argv) {
     // Simple sanity check to verify function linking works
     MatrixOlmWrapper m("HeartOfGold", "Zaphod");
     m.uploadKeys         = uploadKeys;
@@ -80,5 +93,8 @@ int main() {
     });
     */
 
-    this_thread::sleep_for(chrono::seconds(10));
+    this_thread::sleep_for(chrono::seconds(1));
+
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
