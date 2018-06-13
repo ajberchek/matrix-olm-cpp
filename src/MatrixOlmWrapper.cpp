@@ -144,8 +144,7 @@ bool verify(json& message, MatrixOlmWrapper* wrap) {
         // TODO check for empty key
         if (key.empty()) {
             string sentKey;
-            if (getMsgKey(message, sentKey) && wrap->promptVerifyDevice != nullptr &&
-                wrap->promptVerifyDevice(usr, dev, sentKey)) {
+            if (getMsgKey(message, sentKey) && wrap->wrapper->promptVerifyDevice(usr, dev, sentKey)) {
                 wrap->verifyDevice(usr, dev, sentKey);
                 return verify(message, sentKey);
             } else {
@@ -165,11 +164,11 @@ bool verify(json& message, MatrixOlmWrapper* wrap) {
 ////////////////////////////////////////////////////////////
 void MatrixOlmWrapper::setupIdentityKeys() {
     if (!id_published) {
-        if (identity_keys_.empty()) {
+        if (identity_keys.empty()) {
             int id_buff_size = acct->get_identity_json_length();
             unique_ptr<uint8_t[]> id_buff(new uint8_t[id_buff_size]);
             if (size_t(-1) != acct->get_identity_json(id_buff.get(), id_buff_size)) {
-                identity_keys_ = string(reinterpret_cast<const char*>(id_buff.get()));
+                identity_keys = string(reinterpret_cast<const char*>(id_buff.get()));
             } else {
                 // Couldnt get the identity keys
                 return;
@@ -177,29 +176,29 @@ void MatrixOlmWrapper::setupIdentityKeys() {
         }
 
         // Form json and publish keys
-        if (!identity_keys_.empty() && uploadKeys != nullptr) {
+        if (!identity_keys.empty()) {
             try {
-                json id       = json::parse(identity_keys_);
+                json id       = json::parse(identity_keys);
                 json key_data = {
                     {"algorithms", {"m.olm.v1.curve25519-aes-sha2", "m.megolm.v1.aes-sha2"}},
                     {"keys",
-                     {{"curve25519:" + device_id_, id["curve25519"]},
-                      {"ed25519:" + device_id_, id["ed25519"]}}},
-                    {"device_id:", device_id_},
-                    {"user_id", user_id_}};
+                     {{"curve25519:" + device_id, id["curve25519"]},
+                      {"ed25519:" + device_id, id["ed25519"]}}},
+                    {"device_id:", device_id},
+                    {"user_id", user_id}};
 
                 // Sign keyData
                 string sig = signData(key_data, acct);
-                key_data["signatures"][user_id_]["ed25519:" + device_id_] = sig;
+                key_data["signatures"][user_id]["ed25519:" + device_id] = sig;
 
                 // Upload keys
                 string key_string           = key_data.dump();
-                matrAPIRet individKeyUpload = uploadKeys(key_string);
+                APIWrapper::matrAPIRet individKeyUpload = wrapper->uploadKeys(key_string);
                 auto err                    = get<1>(individKeyUpload);
                 if (!err) {
                     id_published = true;
                     // Add our keys to our list of verified devices
-                    verified[user_id_][device_id_] = id["ed25519"].get<string>();
+                    verified[user_id][device_id] = id["ed25519"].get<string>();
                 }
             } catch (const exception& e) {
                 cout << "Encountered an issue during identity key setup: " << endl
@@ -223,7 +222,7 @@ json MatrixOlmWrapper::signKey(json& key) {
         if (!signature.empty()) {
             signed_key = {{"signed_curve25519:" + key.begin().key(),
                            {{to_sign.begin().key(), to_sign.begin().value()},
-                            {"signatures", {{user_id_, {{"ed25519:" + device_id_, signature}}}}}}}};
+                            {"signatures", {{user_id, {{"ed25519:" + device_id, signature}}}}}}}};
             return signed_key;
         } else {
             // Couldnt sign properly, return nullptr to signify this
@@ -287,7 +286,7 @@ void MatrixOlmWrapper::replenishKeyJob() {
     try {
         // Call upload keys to figure out how many keys are present
         string empty          = "{}";
-        matrAPIRet keyCount   = uploadKeys(empty);
+        APIWrapper::matrAPIRet keyCount   = wrapper->uploadKeys(empty);
         string key_counts     = get<0>(keyCount);
         int current_key_count = 0;
         if (!key_counts.empty() && json::parse(key_counts).count("one_time_key_counts") == 1) {
@@ -299,12 +298,12 @@ void MatrixOlmWrapper::replenishKeyJob() {
 
         if (keys_needed) {
             json data;
-            if (genSignedKeys(data, keys_needed) > 0 && uploadKeys != nullptr) {
+            if (genSignedKeys(data, keys_needed) > 0) {
                 // Simple test below to show how verify works
                 json check_sig(data["one_time_keys"].begin().value());
 
                 string data_string       = data.dump(2);
-                matrAPIRet massKeyUpload = uploadKeys(data_string);
+                APIWrapper::matrAPIRet massKeyUpload = wrapper->uploadKeys(data_string);
                 string resp              = get<0>(massKeyUpload);
                 auto err                 = get<1>(massKeyUpload);
                 if (!err) {

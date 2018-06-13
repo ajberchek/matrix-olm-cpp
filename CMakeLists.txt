@@ -46,7 +46,6 @@ include(Findsodium)
 # gtest
 #
 find_package(GTest REQUIRED)
-#include(GTest)
 
 file(DOWNLOAD "https://github.com/nlohmann/json/releases/download/v3.1.2/json.hpp" 
 	${PROJECT_SOURCE_DIR}/deps/json.hpp 

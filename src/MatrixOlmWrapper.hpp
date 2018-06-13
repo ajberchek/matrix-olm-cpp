@@ -6,9 +6,10 @@
 #include <memory>
 #include <tuple>
 
+#include "APIWrapper.hpp"
+
 #include "olm/account.hh"
 #include "olm/session.hh"
-
 #include <json.hpp>
 using json = nlohmann::json;
 
@@ -20,12 +21,13 @@ class MatrixOlmWrapper {
 
     // An empty keyfile_path and keyfile_pass indicates keys shouldn't be
     // persisted
-    MatrixOlmWrapper(string device_id, string user_id)
-        : MatrixOlmWrapper(device_id, user_id, "", "") {}
+    MatrixOlmWrapper(APIWrapper* wrapper, string device_id, string user_id)
+        : MatrixOlmWrapper(wrapper, device_id, user_id, "", "") {}
 
-    MatrixOlmWrapper(string device_id, string user_id, string keyfile_path, string keyfile_pass) {
-        device_id_ = device_id;
-        user_id_   = user_id;
+    MatrixOlmWrapper(APIWrapper* wrapper_, string device_id_, string user_id_, string keyfile_path, string keyfile_pass) {
+        wrapper = wrapper_;
+        device_id = device_id_;
+        user_id   = user_id_;
         acct       = loadAccount(keyfile_path, keyfile_pass);
     }
 
@@ -62,48 +64,19 @@ class MatrixOlmWrapper {
 
     public:
     // Public Variables
-
-    // The below functions need to be provided by the client in the described
-    // format before any homeserver interactions can take place. Client provided
-    // functions should take in strings of the json objects related to the
-    // endpoint they are contacting unless otherwise specified
-
-    using keyRequestErr = experimental::optional<string>;
-    using matrAPIRet    = tuple<string, keyRequestErr>;
-    // Uploads device keys to /_matrix/client/r0/keys/upload
-    // Return: (upload_response, keyRequestErr)
-    function<matrAPIRet(string& key_upload)> uploadKeys;
-    // Returns current device and id keys for the given user from
-    // /_matrix/client/r0/keys/query user_id is the canonical representation of
-    // the user_id who's keys we are requesting
-    // Return: (key_response, keyRequestErr)
-    function<matrAPIRet(string& user_id)> queryKeys;
-    // Claims one-time keys for use in pre-key messages via
-    // /_matrix/client/r0/keys/claim
-    // Return: (claimed_key, keyRequestErr)
-    function<matrAPIRet(string& key_claim)> claimKeys;
-    // Gets a list of users who updated their device identity keys since a
-    // previous sync token by contacting /_matrix/client/r0/keys/changes from is
-    // the desired start point of the list to is the desired end point of the list
-    // Return: (key_changes, keyRequestErr)
-    function<matrAPIRet(string& from, string& to)> getKeyChanges;
-
-    // Function implemented by client that this wrapper should call when it is
-    // requested to verify a device that is untrusted.
-    // This should prompt the user to verify or deny that they trust the device.
-    // Return true if the user decided to verify the device, and false otherwise.
-    // If true, then verifyDevice will be called with these parameters as well.
-    function<bool(string& user_id, string& dev_id, string& fingerprint_key)> promptVerifyDevice;
+    
+    // Class implementing APIWrapper which provides the necessary client functions to interact with the homeserver
+    APIWrapper* wrapper;
 
     // device_id associated with the client this wrapper is providing
     // functionality to
-    string device_id_;
+    string device_id;
     // user_id associated with the client this wrapper is providing functionality
     // to
-    string user_id_;
+    string user_id;
 
     // Identity keys used to identify the device and verify its signatures
-    string identity_keys_;
+    string identity_keys;
 
     private:
     // Private Functions
