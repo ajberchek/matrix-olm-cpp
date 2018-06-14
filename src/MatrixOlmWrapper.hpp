@@ -6,13 +6,13 @@
 #include <memory>
 #include <tuple>
 
+#include <olm/account.hh>
+#include <olm/session.hh>
+#include <json.hpp>
+
 #include "APIWrapper.hpp"
 
-#include "olm/account.hh"
-#include "olm/session.hh"
-#include <json.hpp>
 using json = nlohmann::json;
-
 using namespace std;
 
 class MatrixOlmWrapper {

@@ -53,6 +53,7 @@ file(DOWNLOAD "https://github.com/nlohmann/json/releases/download/v3.1.2/json.hp
 
 include_directories(deps)
 include_directories(src)
+include_directories(include/MatrixOlmWrapper)
 include_directories(SYSTEM sodium_INCLUDE_DIR)
 include_directories(${GTEST_INCLUDE_DIRS})
 include_directories("$ENV{GMOCK_DIR}/include")
