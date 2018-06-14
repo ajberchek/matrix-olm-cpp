@@ -42,7 +42,7 @@ class APIWrapperTestImpl : public APIWrapper {
 
         virtual matrAPIRet queryKeys(string&) { return {"", std::experimental::optional<std::string>()}; }
         virtual matrAPIRet claimKeys(string&) { return {"", std::experimental::optional<std::string>()}; }
-        virtual matrAPIRet mgetKeyChanges(string&, string&) { return {"", std::experimental::optional<std::string>()}; }
+        virtual matrAPIRet getKeyChanges(string&, string&) { return {"", std::experimental::optional<std::string>()}; }
 
         virtual ~APIWrapperTestImpl() {}
 

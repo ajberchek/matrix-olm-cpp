@@ -31,7 +31,7 @@ class APIWrapper {
         // previous sync token by contacting /_matrix/client/r0/keys/changes from is
         // the desired start point of the list to is the desired end point of the list
         // Return: (key_changes, keyRequestErr)
-        virtual matrAPIRet mgetKeyChanges(string& from, string& to) = 0;
+        virtual matrAPIRet getKeyChanges(string& from, string& to) = 0;
 
         // Function implemented by client that this wrapper should call when it is
         // requested to verify a device that is untrusted.
