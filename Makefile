@@ -9,7 +9,8 @@ lint:
 	@clang-format -i ${FILES}
 
 test:
-	@./build/test_interface
+	@./build/test_utils
+	@./build/test_wrapper
 
 clean:
 	rm -rf build

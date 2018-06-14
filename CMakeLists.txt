@@ -63,6 +63,10 @@ add_library(matrix_olm_wrapper ${SRC})
 add_dependencies(matrix_olm_wrapper Olm)
 target_link_libraries(matrix_olm_wrapper olm ${sodium_LIBRARY_RELEASE})
 
-add_executable(test_interface tests/test.cpp)
-target_link_libraries(test_interface matrix_olm_wrapper ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} pthread)
-add_test(BasicTest test_interface)
+add_executable(test_wrapper tests/TestWrapper.cpp)
+target_link_libraries(test_wrapper matrix_olm_wrapper ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} pthread)
+add_test(TestWrapper test_wrapper)
+
+add_executable(test_utils tests/TestUtils.cpp)
+target_link_libraries(test_utils matrix_olm_wrapper ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} pthread)
+add_test(TestUtils test_utils)

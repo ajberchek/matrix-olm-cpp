@@ -9,9 +9,7 @@
 #include "MatrixOlmWrapper.hpp"
 #include "APIWrapperTestImpl.hpp"
 
-// TODO replace with a deterministic test
-// Simple sanity check to verify function linking works
-TEST(InterfaceTest, UploadsExpectedNumKeys) {
+TEST(TestWrapper, UploadsExpectedNumKeys) {
     APIWrapperTestImpl* api = new APIWrapperTestImpl();
     MatrixOlmWrapper m(api, "HeartOfGold", "Zaphod");
 
