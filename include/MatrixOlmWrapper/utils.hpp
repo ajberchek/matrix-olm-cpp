@@ -4,6 +4,9 @@
 #include <iostream>
 #include <memory>
 #include <tuple>
+#include <fstream>
+#include <string>
+#include <cerrno>
 
 #include <olm/base64.hh>
 #include <olm/utility.hh>
@@ -23,6 +26,25 @@ namespace utils {
 ////////////////////////////////////////////////////////////
 //                    Helper Functions                    //
 ////////////////////////////////////////////////////////////
+
+// Read the contents of a file to a string
+// Taken from: insanecoding.blogspot.com/2011/11/how-to-read-in-file-in-c.html
+std::string getFileContents(const char *filename)
+{
+  std::ifstream in(filename, std::ios::in | std::ios::binary);
+  if (in)
+  {
+    std::string contents;
+    in.seekg(0, std::ios::end);
+    contents.resize(in.tellg());
+    in.seekg(0, std::ios::beg);
+    in.read(&contents[0], contents.size());
+    in.close();
+    return(contents);
+  }
+  throw(errno);
+}
+
 // buffer_size is the size of the buffer in number of bytes
 unique_ptr<uint8_t[]> getRandData(unsigned int buffer_size) {
     unique_ptr<uint8_t[]> buffer(new uint8_t[buffer_size]);
@@ -43,7 +65,7 @@ tuple<bool, string, string, string> getMsgInfo(json& m) {
         string dev = algo_dev.substr(algo_dev.find(':') + 1, algo_dev.size());
         string sentKey;
         if (m.count("keys") > 0) {
-            string sentKey = m["keys"]["ed25519:" + dev];
+            sentKey = m["keys"]["ed25519:" + dev];
         }
         return {true, user, dev, sentKey};
     } catch (exception& e) {

@@ -25,6 +25,7 @@ TEST(TestWrapper, UploadsExpectedNumKeys) {
 }
 
 int main(int argc, char **argv) {
+    cout << "---RUNNING WRAPPER TESTS---" << endl;
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
