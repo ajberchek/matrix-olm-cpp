@@ -1,4 +1,5 @@
-#pragma once
+#ifndef MATRIX_OLM_WRAPPER
+#define MATRIX_OLM_WRAPPER
 
 #include <experimental/optional>
 #include <functional>
@@ -6,9 +7,9 @@
 #include <memory>
 #include <tuple>
 
+#include <json.hpp>
 #include <olm/account.hh>
 #include <olm/session.hh>
-#include <json.hpp>
 
 #include "APIWrapper.hpp"
 
@@ -24,11 +25,12 @@ class MatrixOlmWrapper {
     MatrixOlmWrapper(APIWrapper* wrapper, string device_id, string user_id)
         : MatrixOlmWrapper(wrapper, device_id, user_id, "", "") {}
 
-    MatrixOlmWrapper(APIWrapper* wrapper_, string device_id_, string user_id_, string keyfile_path, string keyfile_pass) {
-        wrapper = wrapper_;
+    MatrixOlmWrapper(APIWrapper* wrapper_, string device_id_, string user_id_, string keyfile_path,
+                     string keyfile_pass) {
+        wrapper   = wrapper_;
         device_id = device_id_;
         user_id   = user_id_;
-        acct       = loadAccount(keyfile_path, keyfile_pass);
+        acct      = loadAccount(keyfile_path, keyfile_pass);
     }
 
     // The signAndEncrypt, decryptAndVerify, and verifyDevice functions should be
@@ -64,8 +66,9 @@ class MatrixOlmWrapper {
 
     public:
     // Public Variables
-    
-    // Class implementing APIWrapper which provides the necessary client functions to interact with the homeserver
+
+    // Class implementing APIWrapper which provides the necessary client functions to interact with
+    // the homeserver
     APIWrapper* wrapper;
 
     // device_id associated with the client this wrapper is providing
@@ -110,3 +113,4 @@ class MatrixOlmWrapper {
     // Indicating whether or not identity_keys_ has been published
     bool id_published;
 };
+#endif

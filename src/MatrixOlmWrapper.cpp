@@ -2,14 +2,13 @@
 
 #include <chrono>
 #include <memory>
+#include <stdlib.h>
 #include <string>
 #include <thread>
-#include <stdlib.h>
 
 #include "utils.hpp"
 
 using namespace OlmWrapper::utils;
-
 
 ////////////////////////////////////////////////////////////
 //                   Member Functions                     //
@@ -40,13 +39,13 @@ void MatrixOlmWrapper::setupIdentityKeys() {
                     {"user_id", user_id}};
 
                 // Sign keyData
-                string sig = signData(key_data, acct);
+                string sig                                              = signData(key_data, acct);
                 key_data["signatures"][user_id]["ed25519:" + device_id] = sig;
 
                 // Upload keys
-                string key_string           = key_data.dump();
+                string key_string                       = key_data.dump();
                 APIWrapper::matrAPIRet individKeyUpload = wrapper->uploadKeys(key_string);
-                auto err                    = get<1>(individKeyUpload);
+                auto err                                = get<1>(individKeyUpload);
                 if (!err) {
                     id_published = true;
                     // Add our keys to our list of verified devices
@@ -137,10 +136,10 @@ int MatrixOlmWrapper::genSignedKeys(json& data, int num_keys) {
 void MatrixOlmWrapper::replenishKeyJob() {
     try {
         // Call upload keys to figure out how many keys are present
-        string empty          = "{}";
-        APIWrapper::matrAPIRet keyCount   = wrapper->uploadKeys(empty);
-        string key_counts     = get<0>(keyCount);
-        int current_key_count = 0;
+        string empty                    = "{}";
+        APIWrapper::matrAPIRet keyCount = wrapper->uploadKeys(empty);
+        string key_counts               = get<0>(keyCount);
+        int current_key_count           = 0;
         if (!key_counts.empty() && json::parse(key_counts).count("one_time_key_counts") == 1) {
             current_key_count =
                 json::parse(key_counts)["one_time_key_counts"]["signed_curve25519"].get<int>();
@@ -154,10 +153,10 @@ void MatrixOlmWrapper::replenishKeyJob() {
                 // Simple test below to show how verify works
                 json check_sig(data["one_time_keys"].begin().value());
 
-                string data_string       = data.dump(2);
+                string data_string                   = data.dump(2);
                 APIWrapper::matrAPIRet massKeyUpload = wrapper->uploadKeys(data_string);
-                string resp              = get<0>(massKeyUpload);
-                auto err                 = get<1>(massKeyUpload);
+                string resp                          = get<0>(massKeyUpload);
+                auto err                             = get<1>(massKeyUpload);
                 if (!err) {
                     if (json::parse(resp)["one_time_key_counts"]["signed_curve25519"].get<int>() >
                         current_key_count) {

@@ -1,5 +1,5 @@
-#pragma once
-
+#ifndef UTILS
+#define UTILS
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -192,3 +192,4 @@ bool verify(json& message, MatrixOlmWrapper* wrap) {
 
 }
 }
+#endif
