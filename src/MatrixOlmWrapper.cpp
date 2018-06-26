@@ -10,15 +10,42 @@
 
 using namespace OlmWrapper::utils;
 
+bool MatrixOlmWrapper::verify(json& message) {
+    try {
+        string usr, dev;
+        if (!getMsgUsrId(message, usr) || !getMsgDevId(message, dev)) {
+            return false;
+        }
+
+        // A valid public key should never be ""
+        string key = getUserDeviceKey(usr, dev);
+        // TODO check for empty key
+        if (key.empty()) {
+            string sentKey;
+            if (getMsgKey(message, sentKey) && wrapper->promptVerifyDevice(usr, dev, sentKey)) {
+                verifyDevice(usr, dev, sentKey);
+                return OlmWrapper::utils::verify(message, sentKey);
+            } else {
+                return false;
+            }
+        } else {
+            return OlmWrapper::utils::verify(message, key);
+        }
+    } catch (exception& e) {
+        cout << "Encountered an issue during verification: " << endl << e.what() << endl;
+        return false;
+    }
+}
+
 ////////////////////////////////////////////////////////////
 //                   Member Functions                     //
 ////////////////////////////////////////////////////////////
 void MatrixOlmWrapper::setupIdentityKeys() {
     if (!id_published) {
         if (identity_keys.empty()) {
-            int id_buff_size = acct->get_identity_json_length();
+            int id_buff_size = olm_account_identity_keys_length(acct.get());
             unique_ptr<uint8_t[]> id_buff(new uint8_t[id_buff_size]);
-            if (size_t(-1) != acct->get_identity_json(id_buff.get(), id_buff_size)) {
+            if (olm_error() != olm_account_identity_keys(acct.get(), id_buff.get(), id_buff_size)) {
                 identity_keys = string(reinterpret_cast<const char*>(id_buff.get()));
             } else {
                 // Couldnt get the identity keys
@@ -39,7 +66,7 @@ void MatrixOlmWrapper::setupIdentityKeys() {
                     {"user_id", user_id}};
 
                 // Sign keyData
-                string sig                                              = signData(key_data, acct);
+                string sig = OlmWrapper::utils::signData(key_data, acct);
                 key_data["signatures"][user_id]["ed25519:" + device_id] = sig;
 
                 // Upload keys
@@ -92,14 +119,15 @@ json MatrixOlmWrapper::signKey(json& key) {
  * will be returned
  */
 int MatrixOlmWrapper::genSignedKeys(json& data, int num_keys) {
-    int rand_length                 = acct->generate_one_time_keys_random_length(num_keys);
+    int rand_length = olm_account_generate_one_time_keys_random_length(acct.get(), num_keys);
     unique_ptr<uint8_t[]> rand_data = getRandData(rand_length);
     json original_data              = data;
     try {
-        if (size_t(-1) != acct->generate_one_time_keys(num_keys, rand_data.get(), rand_length)) {
-            int keys_size = acct->get_one_time_keys_json_length();
+        if (olm_error() != olm_account_generate_one_time_keys(acct.get(), num_keys, rand_data.get(),
+                                                              rand_length)) {
+            int keys_size = olm_account_one_time_keys_length(acct.get());
             unique_ptr<uint8_t[]> keys(new uint8_t[keys_size]);
-            if (size_t(-1) != acct->get_one_time_keys_json(keys.get(), keys_size)) {
+            if (olm_error() != olm_account_one_time_keys(acct.get(), keys.get(), keys_size)) {
                 json one_time_keys = json::parse(string(reinterpret_cast<const char*>(keys.get())));
                 json signed_key;
 
@@ -145,7 +173,8 @@ void MatrixOlmWrapper::replenishKeyJob() {
                 json::parse(key_counts)["one_time_key_counts"]["signed_curve25519"].get<int>();
         }
 
-        int keys_needed = static_cast<int>(acct->max_number_of_one_time_keys()) - current_key_count;
+        int keys_needed = static_cast<int>(olm_account_max_number_of_one_time_keys(acct.get())) -
+                          current_key_count;
 
         if (keys_needed) {
             json data;
@@ -160,7 +189,7 @@ void MatrixOlmWrapper::replenishKeyJob() {
                 if (!err) {
                     if (json::parse(resp)["one_time_key_counts"]["signed_curve25519"].get<int>() >
                         current_key_count) {
-                        acct->mark_keys_as_published();
+                        olm_account_mark_keys_as_published(acct.get());
                     }
                 }
             }
@@ -171,12 +200,13 @@ void MatrixOlmWrapper::replenishKeyJob() {
     }
 }
 
-shared_ptr<olm::Account> MatrixOlmWrapper::loadAccount(string keyfile_path, string keyfile_pass) {
-    shared_ptr<olm::Account> acct(new olm::Account);
+shared_ptr<OlmAccount> MatrixOlmWrapper::loadAccount(string keyfile_path, string keyfile_pass) {
+    shared_ptr<OlmAccount> acct(olm_account(new uint8_t[olm_account_size()]),
+                                OlmWrapper::utils::OlmDeleter());
     if (keyfile_path == "" && keyfile_pass == "") {
-        int random_size              = acct->new_account_random_length();
+        int random_size              = olm_create_account_random_length(acct.get());
         unique_ptr<uint8_t[]> random = getRandData(random_size);
-        if (size_t(-1) != acct->new_account(random.get(), random_size)) {
+        if (olm_error() != olm_create_account(acct.get(), random.get(), random_size)) {
             thread([this]() {
                 while (true) {
                     setupIdentityKeys();

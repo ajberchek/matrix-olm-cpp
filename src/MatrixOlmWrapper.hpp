@@ -8,8 +8,7 @@
 #include <tuple>
 
 #include <json.hpp>
-#include <olm/account.hh>
-#include <olm/session.hh>
+#include <olm/olm.h>
 
 #include "APIWrapper.hpp"
 
@@ -87,8 +86,9 @@ class MatrixOlmWrapper {
     // Loads in an olm account from file, or creates one if no file exists.
     // Empty strings for the keyfile_path and keyfile_pass indicate that no data
     // should be persisted to disk.
-    shared_ptr<olm::Account> loadAccount(string keyfile_path, string keyfile_pass);
+    shared_ptr<OlmAccount> loadAccount(string keyfile_path, string keyfile_pass);
 
+    bool verify(json& message);
     json signKey(json& key);
     int genSignedKeys(json& data, int num_keys);
     void setupIdentityKeys();
@@ -98,7 +98,7 @@ class MatrixOlmWrapper {
     // Private Variables
 
     // Account used to interact with olm, and store keys.
-    shared_ptr<olm::Account> acct;
+    shared_ptr<OlmAccount> acct;
 
     // Keeps track of verified devices
     // hashmap(user_id -> hashmap(device_id -> Base64_fingerprint_key))
@@ -106,7 +106,7 @@ class MatrixOlmWrapper {
 
     // Keeps track of open sessions
     // hashmap(identity_key -> Session)
-    unordered_map<string, unique_ptr<olm::Session>> sessions;
+    unordered_map<string, shared_ptr<OlmSession>> sessions;
 
     // Indicates whether or not, data is being persisted to disk
     bool persisting;

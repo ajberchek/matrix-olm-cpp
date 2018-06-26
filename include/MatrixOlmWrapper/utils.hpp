@@ -8,12 +8,9 @@
 #include <string>
 #include <cerrno>
 
-#include <olm/base64.hh>
-#include <olm/utility.hh>
-#include <olm/account.hh>
-#include <olm/session.hh>
 #include <sodium.h>
 #include <json.hpp>
+#include <olm/olm.h>
 
 #include "MatrixOlmWrapper.hpp"
 
@@ -22,6 +19,37 @@ using namespace std;
 
 namespace OlmWrapper{
 namespace utils {
+/*
+* Below deleter functionality reused from mujx/mtxclient
+* 
+Copyright (c) 2018 Konstantinos Sideris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+*
+*/
+struct OlmDeleter
+{
+    void operator()(OlmAccount *ptr) { operator delete(ptr, olm_account_size()); }
+    void operator()(OlmUtility *ptr) { operator delete(ptr, olm_utility_size()); }
+
+    void operator()(OlmSession *ptr) { operator delete(ptr, olm_session_size()); }
+    void operator()(OlmOutboundGroupSession *ptr)
+    {
+            operator delete(ptr, olm_outbound_group_session_size());
+    }
+    void operator()(OlmInboundGroupSession *ptr)
+    {
+            operator delete(ptr, olm_inbound_group_session_size());
+    }
+};
 
 ////////////////////////////////////////////////////////////
 //                    Helper Functions                    //
@@ -114,47 +142,25 @@ void toSignable(json data, string& encoded) {
 }
 
 // Generate a base64 encoded signature
-string signData(const string& message, shared_ptr<olm::Account> acct) {
-    int m_len        = message.size();
-    const uint8_t* m = reinterpret_cast<const uint8_t*>(message.c_str());
-    int sig_len      = acct->signature_length();
-
+string signData(const string& message, shared_ptr<OlmAccount> acct) {
+    int sig_len      = olm_account_signature_length(acct.get());
     unique_ptr<uint8_t[]> sig(new uint8_t[sig_len]);
-    unique_ptr<uint8_t[]> sig_base64(new uint8_t[olm::encode_base64_length(sig_len)]);
-
-    if (size_t(-1) != acct->sign(m, m_len, sig.get(), sig_len)) {
-        olm::encode_base64(sig.get(), sig_len, sig_base64.get());
-        return string(reinterpret_cast<const char*>(sig_base64.get()));
+    if (olm_error() != olm_account_sign(acct.get(), message.data(), message.size(), sig.get(), sig_len)) {
+        return string(reinterpret_cast<const char*>(sig.get()));
     }
     return string();
 }
-string signData(const json& message, shared_ptr<olm::Account> acct) {
+string signData(const json& message, shared_ptr<OlmAccount> acct) {
     string m;
     toSignable(message, m);
     return signData(m, acct);
 }
 
 // Verify a signature
-bool verify(string& message, string& sig, _olm_ed25519_public_key& key) {
-    const uint8_t* m = reinterpret_cast<const uint8_t*>(message.c_str());
-    int sig_dec_len  = olm::decode_base64_length(sig.size());
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(sig.c_str());
-    unique_ptr<uint8_t[]> sig_dec(new uint8_t[sig_dec_len]);
-    olm::decode_base64(s, sig.size(), sig_dec.get());
-
-    return size_t(0) ==
-           olm::Utility().ed25519_verify(key, m, message.size(), sig_dec.get(), sig_dec_len);
-}
 bool verify(string& message, string& sig, string& key) {
-    // Decode key to char array
-    int key_dec_len = olm::decode_base64_length(key.size());
-    if (key_dec_len == ED25519_PUBLIC_KEY_LENGTH) {
-        struct _olm_ed25519_public_key pub_key;
-        const uint8_t* k = reinterpret_cast<const uint8_t*>(key.c_str());
-        olm::decode_base64(k, key.size(), pub_key.public_key);
-        return verify(message, sig, pub_key);
-    }
-    return false;
+    //TODO Create a utility
+    unique_ptr<OlmUtility, OlmDeleter> util(olm_utility(new uint8_t[olm_utility_size()]));
+    return olm_error() != olm_ed25519_verify(util.get(), key.data(), key.size(), message.data(), message.size(), sig.data(), sig.size());
 }
 bool verify(json& message, string& key) {
     // sig = signatures.user_id.key
@@ -162,32 +168,6 @@ bool verify(json& message, string& key) {
     string m_formatted;
     toSignable(message, m_formatted);
     return verify(m_formatted, sig, key);
-}
-bool verify(json& message, MatrixOlmWrapper* wrap) {
-    try {
-        string usr, dev;
-        if (!getMsgUsrId(message, usr) || !getMsgDevId(message, dev)) {
-            return false;
-        }
-
-        // A valid public key should never be ""
-        string key = wrap->getUserDeviceKey(usr, dev);
-        // TODO check for empty key
-        if (key.empty()) {
-            string sentKey;
-            if (getMsgKey(message, sentKey) && wrap->wrapper->promptVerifyDevice(usr, dev, sentKey)) {
-                wrap->verifyDevice(usr, dev, sentKey);
-                return verify(message, sentKey);
-            } else {
-                return false;
-            }
-        } else {
-            return verify(message, key);
-        }
-    } catch (exception& e) {
-        cout << "Encountered an issue during verification: " << endl << e.what() << endl;
-        return false;
-    }
 }
 
 }

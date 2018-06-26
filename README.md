@@ -26,3 +26,10 @@ To test the library, simplpy run `make test`
 
 - Please consult the design document to see what functionality needs to be implemented.
 - Please run `make lint` before submitting a PR
+
+## Credits
+
+The code in this repository could not have been possible without the following
+
+- Code and design inspiration from [mujx/mtxclient](https://github.com/mujx/mtxclient) by Konstantinos Sideris (AKA mujx)
+- Implementation advice from mujx, kitsune, anoa, Matthew, and other members of the matrix community
