@@ -42,18 +42,31 @@ include(Olm)
 #
 include(Findsodium)
 
+#
+# gtest
+#
+find_package(GTest REQUIRED)
+
 file(DOWNLOAD "https://github.com/nlohmann/json/releases/download/v3.1.2/json.hpp" 
 	${PROJECT_SOURCE_DIR}/deps/json.hpp 
 	EXPECTED_HASH SHA256=fbdfec4b4cf63b3b565d09f87e6c3c183bdd45c5be1864d3fcb338f6f02c1733)
 
 include_directories(deps)
 include_directories(src)
+include_directories(include/MatrixOlmWrapper)
 include_directories(SYSTEM sodium_INCLUDE_DIR)
+include_directories(${GTEST_INCLUDE_DIRS})
+include_directories("$ENV{GMOCK_DIR}/include")
 set(SRC src/MatrixOlmWrapper.cpp)
 
 add_library(matrix_olm_wrapper ${SRC})
 add_dependencies(matrix_olm_wrapper Olm)
 target_link_libraries(matrix_olm_wrapper olm ${sodium_LIBRARY_RELEASE})
 
-add_executable(test_interface tests/test.cpp)
-target_link_libraries(test_interface matrix_olm_wrapper)
+add_executable(test_wrapper tests/TestWrapper.cpp)
+target_link_libraries(test_wrapper matrix_olm_wrapper ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} pthread)
+add_test(TestWrapper test_wrapper)
+
+add_executable(test_utils tests/TestUtils.cpp)
+target_link_libraries(test_utils matrix_olm_wrapper ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} pthread)
+add_test(TestUtils test_utils)
